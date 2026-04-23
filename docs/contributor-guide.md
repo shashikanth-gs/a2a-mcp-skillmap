@@ -8,7 +8,7 @@ cd a2a-mcp-skillmap
 npm install
 ```
 
-Everything runs in Node.js (≥ 18). No external services are required; tests use stub dispatchers and the in-memory storage backends.
+Everything runs in Node.js (≥ 20). No external services are required; tests use stub dispatchers and the in-memory storage backends.
 
 ## Workflow
 

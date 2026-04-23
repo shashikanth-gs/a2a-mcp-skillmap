@@ -134,7 +134,7 @@ All external data — agent cards, skill schemas, MCP tool calls — is validate
 
 ## Requirements
 
-- Node.js `>=18`
+- Node.js `>=20`
 - ESM (`"type": "module"`)
 - Peer dep `@opentelemetry/api` is optional — only needed if you wire a tracer
 
