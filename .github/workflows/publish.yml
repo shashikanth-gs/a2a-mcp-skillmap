@@ -75,8 +75,9 @@ jobs:
           registry-url: https://registry.npmjs.org
 
       - run: npm install
-      # `npm publish` runs prepublishOnly, which executes build:publish
-      # (tsconfig.publish.json — no source maps, no declaration maps).
+      # `npm publish` runs prepublishOnly, which executes `npm run build`
+      # and ships the full compiled output (source maps + declaration maps
+      # included — this is an open-source package).
       - name: Publish
         run: npm publish --access public --provenance
         env:

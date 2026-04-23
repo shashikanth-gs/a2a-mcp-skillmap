@@ -13,10 +13,7 @@
     }
   },
   "files": [
-    "dist/**/*.js",
-    "dist/**/*.d.ts",
-    "!dist/**/*.map",
-    "!dist/**/*.test.*",
+    "dist",
     "README.md",
     "LICENSE",
     "CHANGELOG.md"
@@ -35,7 +32,6 @@
   "author": "Shashikanth <shashikanth-gs@users.noreply.github.com>",
   "scripts": {
     "build": "tsc",
-    "build:publish": "tsc -p tsconfig.publish.json",
     "test": "vitest --run",
     "test:watch": "vitest",
     "test:coverage": "vitest --run --coverage",
@@ -43,7 +39,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "clean": "rm -rf dist",
-    "prepublishOnly": "npm run clean && npm run build:publish"
+    "prepublishOnly": "npm run clean && npm run build"
   },
   "keywords": [
     "a2a",
