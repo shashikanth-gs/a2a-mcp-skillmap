@@ -27,6 +27,12 @@ That's it. No schemas to hand-map, no wrappers to write, no protocol translation
 
 ## Why this bridge
 
+**One MCP tool per skill — not one tool per agent.** The naive way to bridge A2A to MCP is to expose each agent as a single catch-all tool and let the LLM figure out which skill to invoke via free-form arguments. That wastes context on protocol plumbing and makes tool choice fuzzy. This bridge parses each agent's skill card and projects **every skill as its own first-class MCP tool** — `research-agent__search`, `research-agent__summarize`, `compliance-agent__check_policy`. Each carries the skill's own description and input schema, so the LLM sees distinct, typed tools and picks the right one the same way it picks any other function call.
+
+**Token-optimized responses.** The default `artifact` response mode strips the A2A protocol envelope (message IDs, context IDs, task metadata) and emits only the content the model actually needs — native MCP blocks for text, image, audio, and file parts. No `"kind":"message","role":"agent",...` boilerplate in every response; no re-parsing a stringified JSON blob. When you do need the metadata for programmatic consumers, opt into `structured` or `raw` mode. Every token you save is a token the LLM can spend on reasoning.
+
+**Sync-fast, async-safe by the same tool call.** A2A agents can reply immediately or kick off a long-running task. The bridge picks the right shape automatically: replies within the configured **sync budget** (default 30s, configurable per deployment) come back in-line as a normal tool result; anything slower returns a `taskId` and surfaces three built-in tools — `task_status`, `task_result`, `task_cancel` — that the client polls with that ID. No protocol mental model for your client to learn, no streaming wiring to maintain, and no tool call that silently hangs.
+
 **Dynamic, not declarative.** Agents evolve. When a skill is added, renamed, or has its schema tightened on the A2A side, the bridge picks it up on the next refresh — no PR to this project, no redeployment of a hand-written adapter.
 
 **Correctness is measured, not asserted.** The design document defines **17 correctness properties** — tool-name determinism, input-validation gate, task state monotonicity, response-projector schema validity, credential redaction, config round-trip, and more. Every one is verified by a `fast-check` property test with ≥ 100 randomized iterations. CI gates on branch coverage ≥ 80% and statement coverage ≥ 85%.
@@ -44,8 +50,8 @@ That's it. No schemas to hand-map, no wrappers to write, no protocol translation
 ## What you get out of the box
 
 - **Two transports**, same engine: stdio for local MCP clients, Streamable HTTP for networked deployments.
-- **Four response modes** per deployment: `artifact` (default — multimodal unwrapping: text/image/audio/file parts become native MCP blocks), `structured` (full canonical + human fallback), `compact` (≤ 280-char summary), `raw` (byte-equivalent A2A payload for debugging). Details + side-by-side JSON examples in the [operator guide](docs/operator-guide.md#response-modes).
-- **Built-in task management tools** — `task_status`, `task_result`, `task_cancel` — for A2A's long-running jobs. No protocol mental model for your client to learn.
+- **Four response modes** — `artifact` (default, multimodal), `structured` (full canonical + metadata), `compact` (≤ 280-char summary), `raw` (byte-equivalent A2A payload). Switch per-deployment. Side-by-side JSON examples in the [operator guide](docs/operator-guide.md#response-modes).
+- **Bearer + API-key auth on both sides** — inbound for HTTP clients calling the bridge, outbound per-agent. Credentials never reach CLI flags or logs.
 - **Structured JSON logs** (pino) with automatic correlation IDs tying every log line, every telemetry event, and every OpenTelemetry span to a single tool invocation.
 - **OpenTelemetry**, optional: `setOtelTracer(tracer)` and you get spans around every invocation and agent resolution. Zero runtime cost when unused.
 - **Graceful degradation.** One broken agent card never takes down the others. One unsupported skill schema never kills its siblings. Agent refreshes are atomic — the old card keeps serving until the new one validates.
