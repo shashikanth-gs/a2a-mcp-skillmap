@@ -1,0 +1,5 @@
+{
+  "agents": [
+    { "url": "https://agent.example.com" }
+  ]
+}

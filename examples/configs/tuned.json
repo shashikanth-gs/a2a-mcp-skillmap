@@ -1,0 +1,15 @@
+{
+  "agents": [
+    { "url": "https://agent-a.example.com" },
+    { "url": "https://agent-b.example.com" }
+  ],
+  "transport": "stdio",
+  "responseMode": "compact",
+  "syncBudgetMs": 60000,
+  "taskRetentionMs": 7200000,
+  "retry": {
+    "maxAttempts": 5,
+    "initialDelayMs": 250
+  },
+  "logging": { "level": "debug" }
+}

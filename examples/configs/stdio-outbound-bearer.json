@@ -1,0 +1,14 @@
+{
+  "agents": [
+    {
+      "url": "https://agent-a.example.com",
+      "auth": { "mode": "bearer", "token": "replace-with-agent-a-token" }
+    },
+    {
+      "url": "https://agent-b.example.com",
+      "auth": { "mode": "bearer", "token": "replace-with-agent-b-token" }
+    }
+  ],
+  "transport": "stdio",
+  "responseMode": "structured"
+}

@@ -1,0 +1,27 @@
+{
+  "_comment": "VS Code MCP extension settings. Add to .vscode/mcp.json or user settings depending on the extension in use.",
+
+  "servers": {
+    "a2a-skillmap": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "a2a-mcp-skillmap",
+        "--a2a-url",
+        "https://agent.example.com"
+      ]
+    },
+
+    "a2a-skillmap-config": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "a2a-mcp-skillmap",
+        "--config",
+        "${workspaceFolder}/bridge.json"
+      ]
+    }
+  }
+}

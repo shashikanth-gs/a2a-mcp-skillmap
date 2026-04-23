@@ -1,0 +1,15 @@
+{
+  "agents": [
+    { "url": "https://agent.example.com" }
+  ],
+  "transport": "http",
+  "http": {
+    "port": 3000,
+    "inboundAuth": {
+      "mode": "api_key",
+      "token": "replace-with-mcp-api-key",
+      "headerName": "X-API-Key"
+    }
+  },
+  "responseMode": "structured"
+}

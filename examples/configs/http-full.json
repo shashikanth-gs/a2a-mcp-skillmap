@@ -1,0 +1,33 @@
+{
+  "agents": [
+    {
+      "url": "https://research-agent.example.com",
+      "auth": { "mode": "bearer", "token": "replace-with-research-token" }
+    },
+    {
+      "url": "https://compliance-agent.example.com",
+      "auth": {
+        "mode": "api_key",
+        "token": "replace-with-compliance-key",
+        "headerName": "X-Compliance-Key"
+      }
+    },
+    {
+      "url": "https://public-agent.example.com",
+      "auth": { "mode": "none" }
+    }
+  ],
+  "transport": "http",
+  "http": {
+    "port": 3000,
+    "inboundAuth": {
+      "mode": "bearer",
+      "token": "replace-with-inbound-mcp-secret"
+    }
+  },
+  "responseMode": "structured",
+  "syncBudgetMs": 30000,
+  "taskRetentionMs": 3600000,
+  "retry": { "maxAttempts": 3, "initialDelayMs": 500 },
+  "logging": { "level": "info" }
+}

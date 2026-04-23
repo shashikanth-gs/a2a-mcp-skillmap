@@ -1,0 +1,37 @@
+{
+  "_comment": "Drop the mcpServers block into your Claude Desktop config file.",
+  "_locations": {
+    "macos": "~/Library/Application Support/Claude/claude_desktop_config.json",
+    "windows": "%APPDATA%\\Claude\\claude_desktop_config.json"
+  },
+
+  "mcpServers": {
+    "a2a-via-skillmap": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "a2a-mcp-skillmap",
+        "--a2a-url",
+        "https://agent.example.com"
+      ]
+    },
+
+    "a2a-with-config": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "a2a-mcp-skillmap",
+        "--config",
+        "/absolute/path/to/bridge.json"
+      ]
+    },
+
+    "a2a-with-env-auth": {
+      "command": "npx",
+      "args": ["-y", "a2a-mcp-skillmap", "--config", "/absolute/path/to/bridge.json"],
+      "env": {
+        "A2A_MCP_INBOUND_AUTH_TOKEN": "replace-with-token"
+      }
+    }
+  }
+}
