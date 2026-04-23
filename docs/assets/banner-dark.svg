@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 440" role="img" aria-labelledby="title desc">
   <title id="title">a2a-mcp-skillmap</title>
-  <desc id="desc">Skills from an A2A agent are projected as MCP tools the client can call. Long-running tasks surface via task_status and task_result.</desc>
+  <desc id="desc">Skills from an A2A agent are projected as MCP tools the client can call. Long-running tasks surface via task_status and task_result; cancellation is available mid-flight.</desc>
 
   <defs>
     <pattern id="grid-d" width="40" height="40" patternUnits="userSpaceOnUse">
@@ -12,136 +12,133 @@
     <marker id="arrow-d-sub" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#a1a1aa"/>
     </marker>
+    <marker id="arrow-d-branch" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#a1a1aa"/>
+    </marker>
   </defs>
 
   <rect width="1280" height="440" fill="#0b0b0d"/>
   <rect width="1280" height="440" fill="url(#grid-d)"/>
   <rect x="0.5" y="0.5" width="1279" height="439" fill="none" stroke="#3f3f46" stroke-width="1"/>
 
-  <!-- ============================================ -->
-  <!-- TOP ROW: skill → tool translation            -->
-  <!-- ============================================ -->
-
   <!-- AGENT column -->
   <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" fill="#fafafa">
-    <text x="160" y="48" text-anchor="middle" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" letter-spacing="0.5" fill="#a1a1aa">A2A AGENT</text>
+    <text x="140" y="48" text-anchor="middle" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" letter-spacing="0.5" fill="#a1a1aa">A2A AGENT</text>
 
-    <rect x="50" y="62" width="220" height="188" rx="6" fill="#18181b" stroke="#fafafa" stroke-width="1.5"/>
-    <text x="160" y="90" text-anchor="middle" font-size="13" font-weight="600">research-agent</text>
+    <rect x="40" y="62" width="200" height="188" rx="6" fill="#18181b" stroke="#fafafa" stroke-width="1.5"/>
+    <text x="140" y="90" text-anchor="middle" font-size="13" font-weight="600">research-agent</text>
 
-    <line x1="70" y1="102" x2="250" y2="102" stroke="#3f3f46"/>
+    <line x1="60" y1="102" x2="220" y2="102" stroke="#3f3f46"/>
 
-    <text x="70" y="124" font-size="11" fill="#a1a1aa">skills:</text>
+    <text x="60" y="124" font-size="11" fill="#a1a1aa">skills:</text>
 
-    <rect x="70" y="134" width="180" height="28" rx="4" fill="#1f1f23" stroke="#52525b"/>
-    <text x="80" y="152" font-size="12">search</text>
+    <rect x="60" y="134" width="160" height="28" rx="4" fill="#1f1f23" stroke="#52525b"/>
+    <text x="70" y="152" font-size="12">search</text>
 
-    <rect x="70" y="170" width="180" height="28" rx="4" fill="#1f1f23" stroke="#52525b"/>
-    <text x="80" y="188" font-size="12">summarize</text>
+    <rect x="60" y="170" width="160" height="28" rx="4" fill="#1f1f23" stroke="#52525b"/>
+    <text x="70" y="188" font-size="12">summarize</text>
 
-    <rect x="70" y="206" width="180" height="28" rx="4" fill="#1f1f23" stroke="#52525b"/>
-    <text x="80" y="224" font-size="12">long_report</text>
+    <rect x="60" y="206" width="160" height="28" rx="4" fill="#1f1f23" stroke="#52525b"/>
+    <text x="70" y="224" font-size="12">long_report</text>
   </g>
 
   <!-- BRIDGE column -->
   <g font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" fill="#fafafa">
-    <text x="640" y="48" text-anchor="middle" font-size="13" font-weight="600" letter-spacing="0.5" fill="#a1a1aa">BRIDGE</text>
-    <rect x="380" y="62" width="520" height="188" rx="8" fill="#18181b" stroke="#fafafa" stroke-width="2"/>
-    <text x="640" y="120" text-anchor="middle" font-size="34" font-weight="700" letter-spacing="-0.8">a2a-mcp-skillmap</text>
-    <text x="640" y="150" text-anchor="middle" font-size="13" fill="#a1a1aa">resolves agent card · projects skills as tools · validates args · shapes responses</text>
+    <text x="590" y="48" text-anchor="middle" font-size="13" font-weight="600" letter-spacing="0.5" fill="#a1a1aa">BRIDGE</text>
+    <rect x="320" y="62" width="540" height="188" rx="8" fill="#18181b" stroke="#fafafa" stroke-width="2"/>
+    <text x="590" y="120" text-anchor="middle" font-size="34" font-weight="700" letter-spacing="-0.8">a2a-mcp-skillmap</text>
+    <text x="590" y="150" text-anchor="middle" font-size="13" fill="#a1a1aa">resolves agent card · projects skills as tools · validates args · shapes responses</text>
 
     <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" fill="#fafafa">
-      <text x="420" y="204">skill</text>
-      <line x1="460" y1="200" x2="620" y2="200" stroke="#fafafa" stroke-width="1" marker-end="url(#arrow-d)"/>
-      <text x="540" y="194" text-anchor="middle" font-size="10" fill="#a1a1aa">translate</text>
-      <text x="630" y="204">tool</text>
+      <text x="360" y="204">skill</text>
+      <line x1="400" y1="200" x2="560" y2="200" stroke="#fafafa" stroke-width="1" marker-end="url(#arrow-d)"/>
+      <text x="480" y="194" text-anchor="middle" font-size="10" fill="#a1a1aa">translate</text>
+      <text x="570" y="204">tool</text>
 
-      <text x="420" y="228">task-handle</text>
-      <line x1="500" y1="224" x2="620" y2="224" stroke="#fafafa" stroke-width="1" marker-end="url(#arrow-d)"/>
-      <text x="560" y="218" text-anchor="middle" font-size="10" fill="#a1a1aa">track</text>
-      <text x="630" y="228">task_* tools</text>
+      <text x="360" y="228">task-handle</text>
+      <line x1="440" y1="224" x2="560" y2="224" stroke="#fafafa" stroke-width="1" marker-end="url(#arrow-d)"/>
+      <text x="500" y="218" text-anchor="middle" font-size="10" fill="#a1a1aa">track</text>
+      <text x="570" y="228">task_* tools</text>
     </g>
   </g>
 
-  <!-- CLIENT column -->
+  <!-- CLIENT column — widened -->
   <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" fill="#fafafa">
-    <text x="1120" y="48" text-anchor="middle" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" letter-spacing="0.5" fill="#a1a1aa">MCP CLIENT</text>
+    <text x="1110" y="48" text-anchor="middle" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="600" letter-spacing="0.5" fill="#a1a1aa">MCP CLIENT</text>
 
-    <rect x="1010" y="62" width="220" height="188" rx="6" fill="#18181b" stroke="#fafafa" stroke-width="1.5"/>
-    <text x="1120" y="90" text-anchor="middle" font-size="13" font-weight="600">claude · vscode · …</text>
+    <rect x="980" y="62" width="260" height="188" rx="6" fill="#18181b" stroke="#fafafa" stroke-width="1.5"/>
+    <text x="1110" y="90" text-anchor="middle" font-size="13" font-weight="600">claude · vscode · …</text>
 
-    <line x1="1030" y1="102" x2="1210" y2="102" stroke="#3f3f46"/>
+    <line x1="1000" y1="102" x2="1220" y2="102" stroke="#3f3f46"/>
 
-    <text x="1030" y="124" font-size="11" fill="#a1a1aa">tools:</text>
+    <text x="1000" y="124" font-size="11" fill="#a1a1aa">tools:</text>
 
-    <rect x="1030" y="134" width="180" height="28" rx="4" fill="#1f1f23" stroke="#52525b"/>
-    <text x="1040" y="152" font-size="12">research-agent__search</text>
+    <rect x="1000" y="134" width="220" height="28" rx="4" fill="#1f1f23" stroke="#52525b"/>
+    <text x="1010" y="152" font-size="11">research-agent__search</text>
 
-    <rect x="1030" y="170" width="180" height="28" rx="4" fill="#1f1f23" stroke="#52525b"/>
-    <text x="1040" y="188" font-size="12">research-agent__summarize</text>
+    <rect x="1000" y="170" width="220" height="28" rx="4" fill="#1f1f23" stroke="#52525b"/>
+    <text x="1010" y="188" font-size="11">research-agent__summarize</text>
 
-    <rect x="1030" y="206" width="180" height="28" rx="4" fill="#1f1f23" stroke="#52525b"/>
-    <text x="1040" y="224" font-size="12">research-agent__long_report</text>
+    <rect x="1000" y="206" width="220" height="28" rx="4" fill="#1f1f23" stroke="#52525b"/>
+    <text x="1010" y="224" font-size="11">research-agent__long_report</text>
   </g>
 
   <!-- 1:1 mapping lines -->
   <g stroke="#fafafa" stroke-width="1.25" fill="none" opacity="0.55">
-    <path d="M 250 148 C 320 148, 360 148, 380 148" marker-end="url(#arrow-d-sub)"/>
-    <path d="M 900 148 C 960 148, 990 148, 1030 148" marker-end="url(#arrow-d-sub)"/>
-    <path d="M 250 184 C 320 184, 360 184, 380 184" marker-end="url(#arrow-d-sub)"/>
-    <path d="M 900 184 C 960 184, 990 184, 1030 184" marker-end="url(#arrow-d-sub)"/>
-    <path d="M 250 220 C 320 220, 360 220, 380 220" marker-end="url(#arrow-d-sub)"/>
-    <path d="M 900 220 C 960 220, 990 220, 1030 220" marker-end="url(#arrow-d-sub)"/>
+    <path d="M 220 148 C 270 148, 300 148, 320 148" marker-end="url(#arrow-d-sub)"/>
+    <path d="M 860 148 C 920 148, 950 148, 1000 148" marker-end="url(#arrow-d-sub)"/>
+    <path d="M 220 184 C 270 184, 300 184, 320 184" marker-end="url(#arrow-d-sub)"/>
+    <path d="M 860 184 C 920 184, 950 184, 1000 184" marker-end="url(#arrow-d-sub)"/>
+    <path d="M 220 220 C 270 220, 300 220, 320 220" marker-end="url(#arrow-d-sub)"/>
+    <path d="M 860 220 C 920 220, 950 220, 1000 220" marker-end="url(#arrow-d-sub)"/>
   </g>
 
-  <!-- ============================================ -->
-  <!-- BOTTOM ROW: long-running task lifecycle     -->
-  <!-- ============================================ -->
+  <!-- BOTTOM: long-running task lifecycle -->
 
   <g font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
-    <text x="50" y="296" font-size="13" font-weight="600" letter-spacing="0.5" fill="#a1a1aa">LONG-RUNNING TASKS</text>
+    <text x="40" y="296" font-size="13" font-weight="600" letter-spacing="0.5" fill="#a1a1aa">LONG-RUNNING TASKS</text>
   </g>
 
-  <g stroke="#fafafa" stroke-width="1" fill="none">
-    <line x1="90" y1="360" x2="1190" y2="360"/>
+  <line x1="90" y1="340" x2="1160" y2="340" stroke="#fafafa" stroke-width="1"/>
+  <line x1="1150" y1="340" x2="1190" y2="340" stroke="#fafafa" stroke-width="1.2" marker-end="url(#arrow-d)"/>
+
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" fill="#fafafa">
+    <circle cx="130" cy="340" r="6" fill="#0b0b0d" stroke="#fafafa" stroke-width="1.5"/>
+    <text x="130" y="322" text-anchor="middle">tools/call</text>
+    <text x="130" y="362" text-anchor="middle" fill="#a1a1aa">long_report</text>
   </g>
 
   <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" fill="#fafafa">
-    <circle cx="130" cy="360" r="6" fill="#0b0b0d" stroke="#fafafa" stroke-width="1.5"/>
-    <text x="130" y="336" text-anchor="middle">tools/call</text>
-    <text x="130" y="388" text-anchor="middle" fill="#a1a1aa">long_report</text>
+    <circle cx="330" cy="340" r="6" fill="#0b0b0d" stroke="#fafafa" stroke-width="1.5"/>
+    <text x="330" y="322" text-anchor="middle">task_id returned</text>
+    <text x="330" y="362" text-anchor="middle" fill="#a1a1aa">state = running</text>
   </g>
 
   <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" fill="#fafafa">
-    <circle cx="330" cy="360" r="6" fill="#0b0b0d" stroke="#fafafa" stroke-width="1.5"/>
-    <text x="330" y="336" text-anchor="middle">task_id returned</text>
-    <text x="330" y="388" text-anchor="middle" fill="#a1a1aa">state = running</text>
+    <circle cx="530" cy="340" r="6" fill="#0b0b0d" stroke="#fafafa" stroke-width="1.5"/>
+    <text x="530" y="322" text-anchor="middle">task_status</text>
+    <text x="530" y="362" text-anchor="middle" fill="#a1a1aa">working · working · …</text>
   </g>
 
   <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" fill="#fafafa">
-    <circle cx="530" cy="360" r="6" fill="#0b0b0d" stroke="#fafafa" stroke-width="1.5"/>
-    <text x="530" y="336" text-anchor="middle">task_status</text>
-    <text x="530" y="388" text-anchor="middle" fill="#a1a1aa">working · working · …</text>
+    <circle cx="830" cy="340" r="6" fill="#fafafa" stroke="#fafafa" stroke-width="1.5"/>
+    <text x="830" y="322" text-anchor="middle">state = completed</text>
+    <text x="830" y="362" text-anchor="middle" fill="#a1a1aa">artifact ready</text>
   </g>
 
   <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" fill="#fafafa">
-    <circle cx="830" cy="360" r="6" fill="#fafafa" stroke="#fafafa" stroke-width="1.5"/>
-    <text x="830" y="336" text-anchor="middle">state = completed</text>
-    <text x="830" y="388" text-anchor="middle" fill="#a1a1aa">artifact ready</text>
+    <circle cx="1080" cy="340" r="6" fill="#0b0b0d" stroke="#fafafa" stroke-width="1.5"/>
+    <text x="1080" y="322" text-anchor="middle">task_result</text>
+    <text x="1080" y="362" text-anchor="middle" fill="#a1a1aa">multimodal blocks</text>
   </g>
 
-  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" fill="#fafafa">
-    <circle cx="1080" cy="360" r="6" fill="#0b0b0d" stroke="#fafafa" stroke-width="1.5"/>
-    <text x="1080" y="336" text-anchor="middle">task_result</text>
-    <text x="1080" y="388" text-anchor="middle" fill="#a1a1aa">multimodal blocks</text>
+  <!-- cancel branch -->
+  <g fill="none" stroke="#a1a1aa" stroke-width="1.2" stroke-dasharray="4 3">
+    <path d="M 530 346 C 530 402, 700 402, 830 402" marker-end="url(#arrow-d-branch)"/>
   </g>
 
-  <g stroke="#fafafa" stroke-width="1.2" fill="none">
-    <line x1="1150" y1="360" x2="1190" y2="360" marker-end="url(#arrow-d)"/>
-  </g>
-
-  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10" fill="#a1a1aa">
-    <path d="M 530 360 C 530 412, 700 412, 700 412" stroke="#52525b" stroke-dasharray="3 3" fill="none"/>
-    <text x="620" y="426" text-anchor="middle">cancel via task_cancel — any time while running</text>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" fill="#a1a1aa">
+    <circle cx="830" cy="410" r="5" fill="#0b0b0d" stroke="#a1a1aa" stroke-width="1.25"/>
+    <text x="850" y="414" font-size="11">state = cancelled  ·  via task_cancel</text>
   </g>
 </svg>
