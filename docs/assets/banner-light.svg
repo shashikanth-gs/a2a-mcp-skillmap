@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 320" role="img" aria-labelledby="title desc">
+  <title id="title">a2a-mcp-skillmap</title>
+  <desc id="desc">Turn any A2A agent into an MCP tool server. Dynamic skill discovery, multimodal output, stdio + HTTP transports.</desc>
+
+  <defs>
+    <!-- subtle grid background -->
+    <pattern id="grid-l" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#e5e7eb" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <!-- background -->
+  <rect width="1280" height="320" fill="#fafafa"/>
+  <rect width="1280" height="320" fill="url(#grid-l)"/>
+
+  <!-- hairline frame -->
+  <rect x="0.5" y="0.5" width="1279" height="319" fill="none" stroke="#d4d4d8" stroke-width="1"/>
+
+  <!-- left column: A2A source -->
+  <g transform="translate(120, 120)">
+    <rect x="0" y="0" width="180" height="80" rx="4" fill="#ffffff" stroke="#18181b" stroke-width="1.5"/>
+    <text x="90" y="34" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="600" fill="#18181b">A2A agent</text>
+    <text x="90" y="54" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" fill="#52525b">skills + tasks</text>
+  </g>
+
+  <!-- left connector -->
+  <g stroke="#18181b" stroke-width="1.5" fill="none">
+    <path d="M 300 160 L 420 160"/>
+    <polygon points="420,160 412,156 412,164" fill="#18181b"/>
+  </g>
+  <text x="360" y="148" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10" fill="#52525b">JSON-RPC</text>
+
+  <!-- center: bridge -->
+  <g transform="translate(420, 80)">
+    <rect x="0" y="0" width="440" height="160" rx="6" fill="#ffffff" stroke="#18181b" stroke-width="2"/>
+    <text x="220" y="58" text-anchor="middle" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="30" font-weight="700" letter-spacing="-0.5" fill="#18181b">a2a-mcp-skillmap</text>
+    <text x="220" y="88" text-anchor="middle" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="400" fill="#52525b">dynamic skill discovery · multimodal output · zero glue code</text>
+
+    <!-- tool pills -->
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" fill="#18181b">
+      <rect x="40"  y="112" width="84" height="26" rx="13" fill="none" stroke="#18181b" stroke-width="1"/>
+      <text x="82"  y="129" text-anchor="middle">stdio</text>
+
+      <rect x="134" y="112" width="84" height="26" rx="13" fill="none" stroke="#18181b" stroke-width="1"/>
+      <text x="176" y="129" text-anchor="middle">HTTP</text>
+
+      <rect x="228" y="112" width="84" height="26" rx="13" fill="none" stroke="#18181b" stroke-width="1"/>
+      <text x="270" y="129" text-anchor="middle">bearer</text>
+
+      <rect x="322" y="112" width="84" height="26" rx="13" fill="none" stroke="#18181b" stroke-width="1"/>
+      <text x="364" y="129" text-anchor="middle">api_key</text>
+    </g>
+  </g>
+
+  <!-- right connector -->
+  <g stroke="#18181b" stroke-width="1.5" fill="none">
+    <path d="M 860 160 L 980 160"/>
+    <polygon points="980,160 972,156 972,164" fill="#18181b"/>
+  </g>
+  <text x="920" y="148" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10" fill="#52525b">MCP</text>
+
+  <!-- right column: MCP client -->
+  <g transform="translate(980, 120)">
+    <rect x="0" y="0" width="180" height="80" rx="4" fill="#ffffff" stroke="#18181b" stroke-width="1.5"/>
+    <text x="90" y="34" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="600" fill="#18181b">MCP client</text>
+    <text x="90" y="54" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" fill="#52525b">text · image · audio</text>
+  </g>
+</svg>

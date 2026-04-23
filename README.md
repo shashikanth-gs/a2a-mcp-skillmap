@@ -1,3 +1,11 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/banner-light.svg">
+    <img alt="a2a-mcp-skillmap — turn any A2A agent into an MCP tool server" src="docs/assets/banner-light.svg" width="100%">
+  </picture>
+</p>
+
 # a2a-mcp-skillmap
 
 [![CI](https://github.com/shashikanth-gs/a2a-mcp-skillmap/actions/workflows/ci.yml/badge.svg)](https://github.com/shashikanth-gs/a2a-mcp-skillmap/actions/workflows/ci.yml)
