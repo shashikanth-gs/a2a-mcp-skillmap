@@ -29,14 +29,14 @@ That's it. No schemas to hand-map, no wrappers to write, no protocol translation
 
 | | |
 |---|---|
-| 🧩 **One tool per skill, not per agent** | Each A2A skill becomes its own MCP tool — `research-agent__search`, `research-agent__summarize`. LLMs pick the right one like any other typed function; no fuzzy "agent-of-many-things" wrapper. |
-| ✂️ **Token-optimized responses** | The default `artifact` mode strips the A2A envelope and emits only the content — native MCP blocks for text, image, audio, and file. Every token saved is a token the LLM spends on reasoning. |
-| ⚡ **Sync-fast, async-safe** | Replies within the configured sync budget (default 30s) come back inline; anything slower returns a `taskId` and three built-in polling tools — `task_status`, `task_result`, `task_cancel`. No streaming wiring, no hanging calls. |
-| 🔄 **Dynamic, not declarative** | Skills added, renamed, or re-typed on the A2A side are picked up on the next refresh. No PR to this project, no hand-written adapter. |
-| ✅ **Correctness is measured** | Design document defines 17 correctness properties, each verified by ≥ 100 `fast-check` iterations. CI gates on ≥ 85% statement and ≥ 80% branch coverage. |
-| 🎯 **Deterministic by design** | Same agent card in → same MCP tools out. Tool names are pure functions of `(agentId, skillId)`, so client tool-caches stay valid across restarts and deployments. |
-| 🔌 **Pluggable where it matters** | Response projector, tool-naming strategy, storage backends, and auth providers are all swappable interfaces with sensible defaults. |
-| 📦 **SDK-first** | Built on the official `@modelcontextprotocol/sdk` and `@a2a-js/sdk` — no hand-rolled JSON-RPC framing. Upstream protocol improvements land here automatically. |
+| **One tool per skill, not per agent** | Each A2A skill becomes its own MCP tool — `research-agent__search`, `research-agent__summarize`. LLMs pick the right one like any other typed function; no fuzzy "agent-of-many-things" wrapper. |
+| **Token-optimized responses** | The default `artifact` mode strips the A2A envelope and emits only the content — native MCP blocks for text, image, audio, and file. Every token saved is a token the LLM spends on reasoning. |
+| **Sync-fast, async-safe** | Replies within the configured sync budget (default 30s) come back inline; anything slower returns a `taskId` and three built-in polling tools — `task_status`, `task_result`, `task_cancel`. No streaming wiring, no hanging calls. |
+| **Dynamic, not declarative** | Skills added, renamed, or re-typed on the A2A side are picked up on the next refresh. No PR to this project, no hand-written adapter. |
+| **Correctness is measured** | Design document defines 17 correctness properties, each verified by ≥ 100 `fast-check` iterations. CI gates on ≥ 85% statement and ≥ 80% branch coverage. |
+| **Deterministic by design** | Same agent card in → same MCP tools out. Tool names are pure functions of `(agentId, skillId)`, so client tool-caches stay valid across restarts and deployments. |
+| **Pluggable where it matters** | Response projector, tool-naming strategy, storage backends, and auth providers are all swappable interfaces with sensible defaults. |
+| **SDK-first** | Built on the official `@modelcontextprotocol/sdk` and `@a2a-js/sdk` — no hand-rolled JSON-RPC framing. Upstream protocol improvements land here automatically. |
 
 ---
 
