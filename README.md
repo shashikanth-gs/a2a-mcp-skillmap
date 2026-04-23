@@ -54,17 +54,21 @@ That's it. No schemas to hand-map, no wrappers to write, no protocol translation
 
 ## Quickstart
 
-### 30 seconds
+Three ways to run the bridge, in order of effort.
+
+### 1. One agent, stdio, no config file
+
+The simplest setup. Point it at a single A2A agent and let it listen on stdin/stdout — that's what an MCP client (Claude Desktop, VS Code, Inspector) expects when it launches the bridge as a child process.
 
 ```bash
 npx a2a-mcp-skillmap --a2a-url https://agent.example.com
 ```
 
-Wire it as the MCP server of your choice (Claude Desktop, VS Code MCP clients, Inspector). Every skill the agent advertises now shows up as a tool.
+Every skill the agent advertises now shows up as a tool in your MCP client.
 
-### 60 seconds — multi-agent, HTTP, authenticated
+### 2. Multiple agents over HTTP, with a config file
 
-`bridge.json`:
+When you have more than one agent, need per-agent credentials, or want to serve MCP over the network instead of stdin — use a config file. Save the following as `bridge.json` (anywhere you like — the path is passed on the command line):
 
 ```json
 {
@@ -84,13 +88,15 @@ Wire it as the MCP server of your choice (Claude Desktop, VS Code MCP clients, I
 }
 ```
 
+Then start the bridge against that file:
+
 ```bash
 npx a2a-mcp-skillmap --config ./bridge.json
 ```
 
-Two agents, different credentials, single HTTP endpoint, authenticated from both sides.
+The bridge loads both agents (each with its own outbound credential), exposes a single HTTP endpoint at `http://localhost:3000/mcp`, and requires MCP clients to authenticate with the `my-mcp-secret` bearer token on the way in.
 
-### Programmatic — embed in your own Node app
+### 3. Embed in your own Node app (programmatic SDK)
 
 ```ts
 import { createBridge, DefaultA2ADispatcher, loadConfig } from 'a2a-mcp-skillmap';
