@@ -9,7 +9,7 @@ See [`sample-agent/`](sample-agent/) — a stand-alone, no-LLM A2A agent with th
 ```bash
 cd examples/sample-agent && npm install && npm start
 # then, in another terminal, point the bridge at it:
-node ./dist/cli/index.js --a2a-url http://127.0.0.1:4003
+npx -y a2a-mcp-skillmap --a2a-url http://127.0.0.1:4003
 ```
 
 ## Precedence recap

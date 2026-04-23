@@ -40,11 +40,10 @@ Environment overrides:
 
 ## Use it through the bridge
 
-In another terminal, from the repo root:
+In another terminal:
 
 ```bash
-npm run build   # once, if you haven't built the bridge yet
-node ./dist/cli/index.js --a2a-url http://127.0.0.1:4003
+npx -y a2a-mcp-skillmap --a2a-url http://127.0.0.1:4003
 ```
 
 The bridge resolves the agent card, projects three MCP tools — `sample-agent__current_time`, `sample-agent__run_command`, `sample-agent__slow_report` — plus the three built-in task tools (`task_status`, `task_result`, `task_cancel`).
@@ -58,9 +57,10 @@ The bridge resolves the agent card, projects three MCP tools — `sample-agent__
   "servers": {
     "sample-agent": {
       "type": "stdio",
-      "command": "node",
+      "command": "npx",
       "args": [
-        "/absolute/path/to/a2a-mcp-skillmap/dist/cli/index.js",
+        "-y",
+        "a2a-mcp-skillmap",
         "--a2a-url",
         "http://127.0.0.1:4003"
       ]

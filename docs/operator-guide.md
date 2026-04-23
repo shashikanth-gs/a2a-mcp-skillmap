@@ -180,11 +180,11 @@ Keep the default **`artifact`** for almost every consumer: MCP clients render ea
 Three equivalent knobs, precedence CLI > env > file:
 
 ```bash
-node ./dist/cli/index.js --a2a-url http://localhost:4003 --response-mode structured
+npx -y a2a-mcp-skillmap --a2a-url http://localhost:4003 --response-mode structured
 ```
 
 ```bash
-A2A_MCP_RESPONSE_MODE=structured node ./dist/cli/index.js --a2a-url http://localhost:4003
+A2A_MCP_RESPONSE_MODE=structured npx -y a2a-mcp-skillmap --a2a-url http://localhost:4003
 ```
 
 ```json
