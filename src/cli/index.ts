@@ -8,6 +8,8 @@
  * @module cli
  */
 
+import { realpathSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { Command, Option } from 'commander';
 import { loadConfig, ConfigLoadError } from '../config/loader.js';
 import type { RawConfig } from '../config/loader.js';
@@ -191,10 +193,40 @@ export async function runCli(
 // Direct execution
 // ---------------------------------------------------------------------------
 
-/* c8 ignore next 10 -- only executed when run as a binary */
-if (import.meta.url === `file://${process.argv[1]}`) {
+/**
+ * Detect whether this module is the program entry point.
+ *
+ * A naive comparison of `import.meta.url` against `file://${process.argv[1]}`
+ * fails whenever the two paths refer to the same file via different
+ * representations:
+ *   - macOS `/tmp` -> `/private/tmp` symlink (and any other symlinked path)
+ *   - pnpm / nvm / Docker bind-mount layouts that traverse symlinks
+ *   - Windows drive-letter casing, backslash vs. forward-slash separators,
+ *     and URL-encoded characters in the file URL
+ *
+ * We canonicalize both sides through `fileURLToPath` (handles platform
+ * separators and percent-encoding) and `realpathSync` (resolves symlinks)
+ * before comparing. `realpathSync` is wrapped so that an unstattable
+ * `argv[1]` is treated as "not the main module" rather than crashing.
+ */
+/* c8 ignore start -- only executed when run as a binary */
+function isMainModule(): boolean {
+  if (!import.meta.url.startsWith('file:')) return false;
+  const invoked = process.argv[1];
+  if (invoked === undefined) return false;
+  try {
+    return realpathSync(fileURLToPath(import.meta.url)) === realpathSync(invoked);
+  } catch {
+    return false;
+  }
+}
+
+if (isMainModule()) {
   runCli().catch((err) => {
-    process.stderr.write(`Fatal: ${err instanceof Error ? err.message : String(err)}\n`);
+    process.stderr.write(
+      `Fatal: ${err instanceof Error ? err.message : String(err)}\n`,
+    );
     process.exit(1);
   });
 }
+/* c8 ignore stop */

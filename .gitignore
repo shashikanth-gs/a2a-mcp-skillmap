@@ -35,6 +35,9 @@ yarn-error.log*
 *.swp
 *.swo
 
+# ADR documents (generated, not checked in)
+docs/adr/
+
 # macOS
 .DS_Store
 
