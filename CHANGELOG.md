@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-05-09
+
 ### Added
 - **`artifact` response mode — new default.** Multimodal unwrapping: every A2A part becomes a native MCP content block. `text` parts → text blocks; `file` parts with inline image/audio bytes → `image` / `audio` blocks; `file` parts with URIs → `resource_link` blocks; `data` parts → stringified-JSON text blocks. Non-image/non-audio inline files degrade to `[file: <name>]` placeholders (no base64 blobs inlined). Parts from multiple artifacts are flattened in order. See the [operator guide](docs/operator-guide.md#response-modes) for a side-by-side multimodal example.
 - Task management tools renamed `task.status` → `task_status`, `task.result` → `task_result`, `task.cancel` → `task_cancel` so names satisfy strict MCP clients (VS Code enforces `^[a-z0-9_-]+$`).
@@ -23,6 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Card URL handling: passing a full `.well-known/agent-card.json` URL no longer double-appends the path and 404s.
+- CLI stdio bridge silently exited with code 0 when launched via `npx` from any path traversing a symlink (notably `/tmp` on macOS, which is a symlink to `/private/tmp`). The main-module guard now canonicalizes both `import.meta.url` and `process.argv[1]` via `fileURLToPath` + `realpathSync` before comparison, so the bridge starts correctly under symlinked layouts (macOS `/tmp`, pnpm content-addressable stores, nvm node symlinks, Docker bind mounts, Windows path-casing differences).
+
+### Removed
+- Internal ADR drafts under `docs/adr/` are no longer checked in. They lived ahead of implementation and have since been superseded by the design doc and code; keeping them in-tree was creating drift. The directory is now ignored.
+
+### CI
+- `.github/workflows/publish.yml` now also publishes on push-to-`main` whenever the commit bumps `package.json` version (in addition to the existing GitHub Release trigger). Push trigger is restricted to `main` only and gated by the same `ENABLE_NPM_PUBLISH` variable + `NPM_TOKEN` secret. After a successful publish on the push path, the workflow auto-creates the matching annotated tag and a generate-notes GitHub Release.
 
 ## [0.1.0] — 2026-04-23
 

@@ -1,10 +1,22 @@
 name: Publish to npm
 
-# Fires when a GitHub Release is published from the UI (or via `gh release create`).
-# The release tag MUST match the version in package.json (e.g., v0.1.0).
+# Two ways this workflow publishes:
+#
+#   1. A GitHub Release is published. The release tag MUST match the version
+#      in package.json (e.g., v0.2.0). Best for marketing-shape minor/major
+#      releases where you want curated release notes.
+#
+#   2. A commit lands on `main` that bumps the `version` field in package.json.
+#      Best for patch / bug-fix releases where the CHANGELOG entry is enough
+#      and a manual Release would be ceremony for ceremony's sake. The job
+#      auto-creates the matching git tag and a "generate-notes" GitHub Release
+#      after a successful publish.
+#
+# Branch safety: the push trigger is restricted to `main`. Pushes to feature
+# branches, PR branches, or forks never publish.
 #
 # Prerequisites (set once per repo):
-#   - Secret   NPM_TOKEN       — npm "automation" access token with publish rights.
+#   - Secret   NPM_TOKEN          — npm "automation" access token with publish rights.
 #   - Variable ENABLE_NPM_PUBLISH — set to "true" to enable publishing.
 #
 # Until both are set, the publish job short-circuits with a clear message
@@ -14,12 +26,79 @@ name: Publish to npm
 on:
   release:
     types: [published]
+  push:
+    branches: [main]
+    paths:
+      - 'package.json'
 
 jobs:
+  # -------------------------------------------------------------------------
+  # 1. Decide whether this event should publish, and to what version.
+  # -------------------------------------------------------------------------
+  detect:
+    name: Detect publish intent
+    runs-on: ubuntu-latest
+    outputs:
+      should_publish: ${{ steps.decide.outputs.should_publish }}
+      version: ${{ steps.decide.outputs.version }}
+      tag: ${{ steps.decide.outputs.tag }}
+      via: ${{ steps.decide.outputs.via }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # We need HEAD~1 to diff package.json on the push path.
+          fetch-depth: 2
+
+      - id: decide
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          TAG="v${PKG_VERSION}"
+
+          if [ "$EVENT_NAME" = "release" ]; then
+            if [ "$RELEASE_TAG" != "$TAG" ]; then
+              echo "::error::Release tag $RELEASE_TAG does not match package.json version $TAG"
+              echo "Bump package.json (and CHANGELOG) before cutting the release."
+              exit 1
+            fi
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            echo "version=$PKG_VERSION"  >> "$GITHUB_OUTPUT"
+            echo "tag=$TAG"               >> "$GITHUB_OUTPUT"
+            echo "via=release"            >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # push-to-main path: only publish when the version field actually changed.
+          PREV_VERSION="$(git show HEAD~1:package.json 2>/dev/null | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).version" || echo '')"
+          if [ "$PREV_VERSION" = "$PKG_VERSION" ]; then
+            echo "package.json version unchanged ($PKG_VERSION). Skipping publish."
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Refuse to clobber an existing tag (e.g., someone hand-tagged earlier).
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "::error::Tag $TAG already exists; refusing to republish."
+            exit 1
+          fi
+
+          echo "Detected version bump: ${PREV_VERSION:-<none>} -> $PKG_VERSION"
+          echo "should_publish=true" >> "$GITHUB_OUTPUT"
+          echo "version=$PKG_VERSION"  >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG"               >> "$GITHUB_OUTPUT"
+          echo "via=push"               >> "$GITHUB_OUTPUT"
+
+  # -------------------------------------------------------------------------
+  # 2. Lint + type-check + test + build (gate before any registry write).
+  # -------------------------------------------------------------------------
   verify:
     name: Lint, type-check, test
+    needs: detect
+    if: needs.detect.outputs.should_publish == 'true'
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
@@ -33,26 +112,18 @@ jobs:
       - run: npm run test:coverage
       - run: npm run build
 
-      - name: Check that package.json version matches release tag
-        run: |
-          PKG_VERSION="v$(node -p "require('./package.json').version")"
-          TAG="${{ github.event.release.tag_name }}"
-          if [ "$PKG_VERSION" != "$TAG" ]; then
-            echo "Release tag $TAG does not match package.json version $PKG_VERSION"
-            echo "Bump package.json (and CHANGELOG) before cutting the release."
-            exit 1
-          fi
-
+  # -------------------------------------------------------------------------
+  # 3. Publish to npm. On the push path, also tag and create a GitHub Release.
+  # -------------------------------------------------------------------------
   publish:
     name: Publish to npm registry
     runs-on: ubuntu-latest
-    needs: verify
-    # Only run when the operator has explicitly opted in. This keeps the
-    # workflow safe to leave enabled on a private repo; flip the variable
-    # to "true" once NPM_TOKEN is added and you're ready to publish.
-    if: vars.ENABLE_NPM_PUBLISH == 'true'
+    needs: [detect, verify]
+    if: needs.detect.outputs.should_publish == 'true' && vars.ENABLE_NPM_PUBLISH == 'true'
     permissions:
-      contents: read
+      # `contents: write` is needed only on the push path, to create the tag
+      # and the auto-generated Release. The release path already has both.
+      contents: write
       id-token: write # required for npm provenance
 
     steps:
@@ -75,6 +146,19 @@ jobs:
           registry-url: https://registry.npmjs.org
 
       - run: npm install
+
+      - name: Refuse to republish an existing version
+        env:
+          VERSION: ${{ needs.detect.outputs.version }}
+        run: |
+          set -euo pipefail
+          PKG_NAME="$(node -p "require('./package.json').name")"
+          if npm view "${PKG_NAME}@${VERSION}" version >/dev/null 2>&1; then
+            echo "::error::${PKG_NAME}@${VERSION} is already published to npm."
+            echo "Bump package.json again and re-push."
+            exit 1
+          fi
+
       # `npm publish` runs prepublishOnly, which executes `npm run build`
       # and ships the full compiled output (source maps + declaration maps
       # included — this is an open-source package).
@@ -83,11 +167,29 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+      # Only on the push path — the release path was triggered BY a Release,
+      # so the tag and Release already exist.
+      - name: Tag and create GitHub Release
+        if: needs.detect.outputs.via == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.detect.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "$TAG"
+          git push origin "$TAG"
+          gh release create "$TAG" --title "$TAG" --generate-notes
+
+  # -------------------------------------------------------------------------
+  # Helpful "did nothing on purpose" log when publishing is gated off.
+  # -------------------------------------------------------------------------
   skipped:
     name: Publish skipped (not enabled)
     runs-on: ubuntu-latest
-    needs: verify
-    if: vars.ENABLE_NPM_PUBLISH != 'true'
+    needs: [detect, verify]
+    if: needs.detect.outputs.should_publish == 'true' && vars.ENABLE_NPM_PUBLISH != 'true'
     steps:
       - run: |
           echo "npm publish is disabled for this repo."
