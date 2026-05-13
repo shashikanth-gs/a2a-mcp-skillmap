@@ -251,6 +251,7 @@ function serializeStructured(
   };
   if (result.taskId !== undefined) out['taskId'] = result.taskId;
   if (result.taskState !== undefined) out['taskState'] = result.taskState;
+  if (result.sessionId !== undefined) out['sessionId'] = result.sessionId;
   return out;
 }
 

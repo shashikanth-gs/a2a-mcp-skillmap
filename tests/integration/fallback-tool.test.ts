@@ -143,3 +143,98 @@ describe('fallback tool — zero-skill agent', () => {
     expect(skillTools).toHaveLength(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Text-only skill dispatch (defaultInputModes: ['text/plain'], no inputSchema)
+// ---------------------------------------------------------------------------
+
+const TEXT_ONLY_CARD = {
+  name: 'splunk agent',
+  description: 'queries splunk',
+  version: '1.0.0',
+  url: 'http://localhost:4004',
+  protocolVersion: '0.3.0',
+  defaultInputModes: ['text/plain'],
+  defaultOutputModes: ['text/plain'],
+  skills: [
+    { id: 'log-analysis', name: 'Log Analysis', description: 'Analyze logs' },
+  ],
+};
+
+function textOnlyConfig(): BridgeConfig {
+  return {
+    agents: [{ url: 'http://localhost:4004', auth: { mode: 'none' } }],
+    transport: 'stdio',
+    responseMode: 'structured',
+    fallbackTool: 'message',
+    syncBudgetMs: 5000,
+    taskRetentionMs: 3_600_000,
+    retry: { maxAttempts: 1, initialDelayMs: 0 },
+    logging: { level: 'error' },
+  };
+}
+
+describe('text-only skill dispatch', () => {
+  it('dispatches with fallback=true (text part) when skill has no inputSchema and inputModes is text/plain', async () => {
+    const dispatcher = new RecordingDispatcher();
+    const bridge = createBridge(textOnlyConfig(), {
+      dispatcher,
+      agentResolver: new AgentResolver({
+        fetcher: async () => TEXT_ONLY_CARD,
+      }),
+    });
+    await bridge.start();
+
+    const tools = bridge.engine.listTools();
+    const skillTool = tools.find((t) => !t.name.startsWith('task_'))!;
+    expect(skillTool).toBeDefined();
+
+    await bridge.engine.callTool(skillTool.name, {
+      message: 'Check errors in last 30 minutes',
+    });
+
+    expect(dispatcher.calls).toHaveLength(1);
+    expect(dispatcher.calls[0]!.fallback).toBe(true);
+    expect(dispatcher.calls[0]!.args).toEqual({ message: 'Check errors in last 30 minutes' });
+  });
+
+  it('dispatches with fallback=true when skill has no inputModes at all (empty array)', async () => {
+    const dispatcher = new RecordingDispatcher();
+    const noModesCard = {
+      ...TEXT_ONLY_CARD,
+      defaultInputModes: [],
+      skills: [{ id: 'query', name: 'Query', description: 'Run a query' }],
+    };
+    const bridge = createBridge(textOnlyConfig(), {
+      dispatcher,
+      agentResolver: new AgentResolver({ fetcher: async () => noModesCard }),
+    });
+    await bridge.start();
+
+    await bridge.engine.callTool('splunk_agent__query', { message: 'test' });
+
+    expect(dispatcher.calls[0]!.fallback).toBe(true);
+  });
+
+  it('dispatches with fallback=false (data part) when skill has an inputSchema', async () => {
+    const dispatcher = new RecordingDispatcher();
+    const schemaCard = {
+      ...TEXT_ONLY_CARD,
+      skills: [{
+        id: 'structured',
+        name: 'Structured',
+        description: 'Has schema',
+        inputSchema: { type: 'object', properties: { query: { type: 'string' } } },
+      }],
+    };
+    const bridge = createBridge(textOnlyConfig(), {
+      dispatcher,
+      agentResolver: new AgentResolver({ fetcher: async () => schemaCard }),
+    });
+    await bridge.start();
+
+    await bridge.engine.callTool('splunk_agent__structured', { query: 'error count' });
+
+    expect(dispatcher.calls[0]!.fallback).toBe(false);
+  });
+});

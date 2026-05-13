@@ -190,4 +190,76 @@ describe('DefaultA2ADispatcher', () => {
     });
     expect(factoryCalls).toBe(1);
   });
+
+  describe('part type selection', () => {
+    function captureDispatcher() {
+      let capturedParts: unknown[] = [];
+      const d = new DefaultA2ADispatcher({
+        clientFactory: () => ({
+          sendMessage: async (req: { message: { parts: unknown[] } }) => {
+            capturedParts = req.message.parts;
+            return { result: { kind: 'message', messageId: 'm', role: 'agent', parts: [] } };
+          },
+        } as unknown as A2AClient),
+      });
+      return { d, getParts: () => capturedParts };
+    }
+
+    it('sends a text part when fallback=true with a message arg', async () => {
+      const { d, getParts } = captureDispatcher();
+      await d.dispatch({
+        agentUrl: 'https://a.com',
+        skillId: 's',
+        args: { message: 'hello from text-only agent' },
+        correlationId: 'c',
+        fallback: true,
+      });
+      const parts = getParts() as Array<{ kind: string; text?: string }>;
+      expect(parts).toHaveLength(1);
+      expect(parts[0].kind).toBe('text');
+      expect(parts[0].text).toBe('hello from text-only agent');
+    });
+
+    it('sends a text part when fallback=true with non-message args (JSON-serialized)', async () => {
+      const { d, getParts } = captureDispatcher();
+      await d.dispatch({
+        agentUrl: 'https://a.com',
+        skillId: 's',
+        args: { query: 'error count', timeRange: '30m' },
+        correlationId: 'c',
+        fallback: true,
+      });
+      const parts = getParts() as Array<{ kind: string; text?: string }>;
+      expect(parts[0].kind).toBe('text');
+      expect(parts[0].text).toBe(JSON.stringify({ query: 'error count', timeRange: '30m' }));
+    });
+
+    it('sends a data part when fallback=false (normal structured skill)', async () => {
+      const { d, getParts } = captureDispatcher();
+      await d.dispatch({
+        agentUrl: 'https://a.com',
+        skillId: 'log-analysis',
+        args: { message: 'check errors' },
+        correlationId: 'c',
+        fallback: false,
+      });
+      const parts = getParts() as Array<{ kind: string; data?: { skillId: string; args: unknown } }>;
+      expect(parts).toHaveLength(1);
+      expect(parts[0].kind).toBe('data');
+      expect(parts[0].data?.skillId).toBe('log-analysis');
+      expect(parts[0].data?.args).toEqual({ message: 'check errors' });
+    });
+
+    it('sends a data part when fallback is omitted (default)', async () => {
+      const { d, getParts } = captureDispatcher();
+      await d.dispatch({
+        agentUrl: 'https://a.com',
+        skillId: 's',
+        args: {},
+        correlationId: 'c',
+      });
+      const parts = getParts() as Array<{ kind: string }>;
+      expect(parts[0].kind).toBe('data');
+    });
+  });
 });

@@ -59,6 +59,11 @@ export function buildProgram(): Command {
     )
     .option('--config <path>', 'Path to JSON configuration file')
     .option(
+      '--sync-budget-ms <ms>',
+      'Max milliseconds to wait for an A2A response before switching to async task polling (0 = no limit)',
+      (v) => Number(v),
+    )
+    .option(
       '--log-level <level>',
       'Logging level (trace|debug|info|warn|error|fatal)',
     );
@@ -75,6 +80,7 @@ interface ParsedFlags {
   port?: number;
   responseMode?: string;
   fallbackTool?: string;
+  syncBudgetMs?: number;
   config?: string;
   logLevel?: string;
 }
@@ -88,6 +94,7 @@ function flagsToRawConfig(flags: ParsedFlags): Partial<RawConfig> {
   if (flags.port !== undefined) out.http = { port: flags.port };
   if (flags.responseMode !== undefined) out.responseMode = flags.responseMode;
   if (flags.fallbackTool !== undefined) out.fallbackTool = flags.fallbackTool;
+  if (flags.syncBudgetMs !== undefined) out.syncBudgetMs = flags.syncBudgetMs;
   if (flags.logLevel !== undefined) out.logging = { level: flags.logLevel };
   return out;
 }

@@ -266,6 +266,25 @@ export function normalizeSkills(
  * `z.object({}).passthrough()` when the skill declares no inputSchema.
  */
 export function buildInputSchema(skill: ResolvedSkill): ZodType {
-  if (!skill.inputSchema) return z.object({}).passthrough();
-  return jsonSchemaToZod(skill.inputSchema, skill.id, '$.inputSchema');
+  const sessionField = {
+    sessionId: z.string().optional().describe(
+      'Session ID for multi-turn conversation continuity. ' +
+      'The sessionId is returned in the response of every tool call. ' +
+      'Pass it back here on subsequent calls to maintain conversation context with the agent.',
+    ),
+  };
+  if (!skill.inputSchema) {
+    // Text-only skills still need a `message` parameter so the MCP client
+    // actually prompts the user for input and forwards it to the A2A agent.
+    return z.object({
+      message: z.string().describe('Message to send to the agent'),
+      ...sessionField,
+    });
+  }
+  const base = jsonSchemaToZod(skill.inputSchema, skill.id, '$.inputSchema');
+  // Wrap object schemas to include sessionId; non-object schemas pass through.
+  if (base instanceof z.ZodObject) {
+    return base.extend(sessionField);
+  }
+  return base;
 }

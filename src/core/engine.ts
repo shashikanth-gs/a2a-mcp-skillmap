@@ -13,6 +13,7 @@ import type {
   AgentAuthProvider,
   AgentConfig,
   BridgeError,
+  BridgeTask,
   CanonicalResult,
   ProjectionContext,
   ResolvedSkill,
@@ -172,10 +173,13 @@ export class BridgeEngine {
       );
     }
 
+    const sessionId = typeof args['sessionId'] === 'string' ? args['sessionId'] : undefined;
+
     const outcome = await this.runtime.invoke(source, args, {
       correlationId,
       responseMode: this.responseMode,
       syncBudgetMs: this.syncBudgetMs,
+      sessionId,
     });
 
     if (outcome.kind === 'error') {
@@ -200,11 +204,11 @@ export class BridgeEngine {
     return [
       mk(
         TASK_STATUS_TOOL,
-        'Poll the current state of a long-running task by its bridge taskId.',
+        'Check the current state of a long-running task. Waits briefly for the task to settle before responding. Returns the task state, elapsed time, and the latest agent status update if available.',
       ),
       mk(
         TASK_RESULT_TOOL,
-        'Retrieve the final result of a completed long-running task by its bridge taskId.',
+        'Retrieve the result of a long-running task. Waits briefly for the task to complete before responding. If the task is still running, returns progress information — call again later to get the final answer.',
       ),
       mk(
         TASK_CANCEL_TOOL,
@@ -247,11 +251,65 @@ export class BridgeEngine {
     }
 
     if (name === TASK_STATUS_TOOL) {
+      // Wait for terminal state if still running, respecting the sync budget.
+      if (task.state === 'running') {
+        const settled = await this.waitForTaskSettlement(task, ctx.correlationId);
+        if (settled) {
+          const result: CanonicalResult = {
+            status: 'success',
+            taskId: settled.taskId,
+            taskState: settled.state,
+            sessionId: settled.contextId,
+            artifacts: settled.result?.artifacts ?? [],
+            metadata: {
+              agentUrl: settled.agentUrl,
+              skillId: settled.skillId,
+              durationMs: 0,
+              correlationId: ctx.correlationId,
+              a2aTaskId: settled.a2aTaskId,
+            },
+          };
+          return this.projector.project(result, ctx);
+        }
+        // Still running after budget — return a status message.
+        const latest = this.taskManager.getTask(task.taskId);
+        const elapsedSec = Math.round(
+          (Date.now() - task.createdAt) / 1000,
+        );
+        const agentHint = latest?.statusMessage
+          ? ` Agent status: ${latest.statusMessage}.`
+          : '';
+        const statusResult: CanonicalResult = {
+          status: 'success',
+          taskId: task.taskId,
+          taskState: 'running',
+          sessionId: task.contextId,
+          artifacts: [
+            {
+              type: 'text/plain',
+              data:
+                `Task "${task.taskId}" is still running ` +
+                `(${elapsedSec}s elapsed).${agentHint} ` +
+                `The agent is processing the request in the background. ` +
+                `Call task_result with this taskId to retrieve the answer once ready.`,
+            },
+          ],
+          metadata: {
+            agentUrl: task.agentUrl,
+            skillId: task.skillId,
+            durationMs: 0,
+            correlationId: ctx.correlationId,
+            a2aTaskId: task.a2aTaskId,
+          },
+        };
+        return this.projector.project(statusResult, ctx);
+      }
       const result: CanonicalResult = {
         status: 'success',
         taskId: task.taskId,
         taskState: task.state,
-        artifacts: [],
+        sessionId: task.contextId,
+        artifacts: task.result?.artifacts ?? [],
         metadata: {
           agentUrl: task.agentUrl,
           skillId: task.skillId,
@@ -268,18 +326,44 @@ export class BridgeEngine {
         return this.projector.project(task.result, ctx);
       }
       if (task.state === 'running') {
+        // Wait for the task to settle, respecting the sync budget so the
+        // LLM doesn't get an instant "still running" and hammer the tool.
+        const settled = await this.waitForTaskSettlement(task, ctx.correlationId);
+        if (settled?.state === 'completed' && settled.result) {
+          return this.projector.project(settled.result, ctx);
+        }
+        if (settled?.state === 'failed') {
+          const err = settled.error ?? {
+            code: 'TASK_FAILED',
+            message: `Task ${settled.taskId} failed`,
+            correlationId: ctx.correlationId,
+          };
+          return this.errorResult(
+            { code: err.code, message: err.message, correlationId: ctx.correlationId, details: { taskId } },
+            ctx,
+          );
+        }
+        // Still running after budget — tell the LLM.
+        const latestTask = this.taskManager.getTask(task.taskId);
+        const elapsedSec = Math.round(
+          (Date.now() - task.createdAt) / 1000,
+        );
+        const agentHint = latestTask?.statusMessage
+          ? ` Agent status: ${latestTask.statusMessage}.`
+          : '';
         const pending: CanonicalResult = {
           status: 'success',
           taskId: task.taskId,
-          taskState: task.state,
+          taskState: 'running',
+          sessionId: task.contextId,
           artifacts: [
             {
-              type: 'application/json',
-              data: {
-                status: 'running',
-                taskId: task.taskId,
-                message: 'Task is still running. Poll again later.',
-              },
+              type: 'text/plain',
+              data:
+                `Task "${task.taskId}" is still running ` +
+                `(${elapsedSec}s elapsed).${agentHint} ` +
+                `The agent is still processing. ` +
+                `Call task_result again with this taskId to retrieve the answer once ready.`,
             },
           ],
           metadata: {
@@ -345,6 +429,116 @@ export class BridgeEngine {
   // -------------------------------------------------------------------------
   // Internals
   // -------------------------------------------------------------------------
+
+  /**
+   * Wait up to `syncBudgetMs` for a running task to reach a terminal state.
+   *
+   * For deferred dispatches (sync-budget exceeded on the initial call), the
+   * background `deferDispatchCompletion` handler updates the local task
+   * store — so we poll the store at short intervals.
+   *
+   * For tasks with a real A2A task ID, we also try `refreshTask()` to
+   * actively re-query the remote agent.
+   *
+   * Returns the settled `BridgeTask` if it reached a terminal state within
+   * the budget, or `undefined` if it's still running.
+   */
+  private async waitForTaskSettlement(
+    task: BridgeTask,
+    correlationId: string,
+  ): Promise<BridgeTask | undefined> {
+    const POLL_INTERVAL_MS = 2_000;
+    const deadline = Date.now() + this.syncBudgetMs;
+
+    while (Date.now() < deadline) {
+      // Check if the background handler already settled the task.
+      const current = this.taskManager.getTask(task.taskId);
+      if (current && current.state !== 'running') {
+        return current;
+      }
+
+      // Try an active re-query for tasks with a real A2A task ID.
+      if (current) {
+        const refreshed = await this.refreshTask(current, correlationId);
+        if (refreshed && refreshed.state !== 'running') {
+          return refreshed;
+        }
+      }
+
+      // Wait before next poll, but don't overshoot the deadline.
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) break;
+      await new Promise((r) => setTimeout(r, Math.min(POLL_INTERVAL_MS, remaining)));
+    }
+
+    // Final check after the budget.
+    const final = this.taskManager.getTask(task.taskId);
+    return final && final.state !== 'running' ? final : undefined;
+  }
+
+  /**
+   * Re-query the remote A2A agent for the latest task state.
+   * If the task has reached a terminal state, updates the local BridgeTask
+   * store and returns the refreshed task. Returns `undefined` when the
+   * dispatcher does not support `getTask()` or the query fails.
+   */
+  private async refreshTask(
+    task: BridgeTask,
+    correlationId: string,
+  ): Promise<BridgeTask | undefined> {
+    // Deferred dispatches (sync-budget exceeded) use a placeholder a2aTaskId.
+    // The background handler will update the task when the dispatch settles;
+    // we cannot re-query the agent without a real task ID.
+    if (task.a2aTaskId.startsWith('pending:')) return undefined;
+    if (!this.dispatcher.getTask) return undefined;
+    try {
+      const auth = this.authProviders.get(task.agentUrl);
+      const fresh = await this.dispatcher.getTask({
+        agentUrl: task.agentUrl,
+        a2aTaskId: task.a2aTaskId,
+        auth,
+        correlationId,
+      });
+
+      if (fresh.kind === 'final') {
+        const result: CanonicalResult = {
+          status: 'success',
+          artifacts: fresh.artifacts ?? [],
+          metadata: {
+            agentUrl: task.agentUrl,
+            skillId: task.skillId,
+            durationMs: 0,
+            correlationId,
+            a2aTaskId: task.a2aTaskId,
+          },
+        };
+        return this.taskManager.updateTaskState(task.taskId, {
+          newState: 'completed',
+          result,
+        });
+      }
+
+      if (fresh.kind === 'error') {
+        return this.taskManager.updateTaskState(task.taskId, {
+          newState: 'failed',
+          error: {
+            code: fresh.code,
+            message: fresh.message,
+            correlationId,
+          },
+        });
+      }
+
+      // Still running — persist the latest status message if available.
+      if (fresh.statusMessage) {
+        this.taskManager.updateStatusMessage(task.taskId, fresh.statusMessage);
+      }
+      return undefined;
+    } catch {
+      // getTask() failed (network, unsupported, …) — degrade gracefully.
+      return undefined;
+    }
+  }
 
   private buildLookup(): SkillLookup {
     return {

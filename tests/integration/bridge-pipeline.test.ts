@@ -228,7 +228,10 @@ describe('Bridge pipeline — long-running task lifecycle', () => {
       a2aTaskId: 'remote-task-123',
     }));
 
-    const bridge = createBridge(buildConfig(), {
+    // Use syncBudgetMs=0 so task_status/task_result don't wait —
+    // the stub never completes, and we're testing the state machine, not
+    // the wait-for-settlement behaviour.
+    const bridge = createBridge(buildConfig({ syncBudgetMs: 0 }), {
       dispatcher,
       agentResolver: resolver,
     });
@@ -251,15 +254,15 @@ describe('Bridge pipeline — long-running task lifecycle', () => {
       (status.structuredContent as Record<string, unknown>)['taskState'],
     ).toBe('running');
 
-    // task.result on running → "not yet available" indicator.
+    // task.result on running → "still running" text hint.
     const resultPending = await bridge.engine.callTool('task_result', {
       taskId: bridgeTaskId,
     });
     expect(resultPending.isError).toBeUndefined();
     const pending = resultPending.structuredContent as Record<string, unknown>;
-    expect((pending['artifacts'] as Array<unknown>)[0]).toMatchObject({
-      data: expect.objectContaining({ status: 'running' }),
-    });
+    const pendingArtifact = (pending['artifacts'] as Array<{ data: unknown }>)[0];
+    expect(typeof pendingArtifact.data).toBe('string');
+    expect(pendingArtifact.data).toMatch(/still running/i);
 
     // task.cancel transitions to cancelled.
     const cancelled = await bridge.engine.callTool('task_cancel', {

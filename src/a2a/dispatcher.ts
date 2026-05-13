@@ -25,6 +25,86 @@ import type {
 } from '../core/invocation-runtime.js';
 import type { AgentAuthProvider } from '../types/index.js';
 import { resolveCardUrl } from './card-url.js';
+import { createLogger } from '../core/logger.js';
+
+const log = createLogger({ level: 'debug' });
+
+/** URI identifying A2A trace/telemetry sideband artifacts. */
+const TRACE_EXTENSION_URI = 'urn:x-a2a:trace:v1';
+
+/**
+ * Returns true for artifacts tagged as observability sideband.
+ * These should be forwarded to telemetry sinks, never to the MCP caller / LLM.
+ */
+function isTraceArtifact(artifact: unknown): boolean {
+  if (!artifact || typeof artifact !== 'object') return false;
+  const exts = (artifact as Record<string, unknown>)['extensions'];
+  return Array.isArray(exts) && exts.includes(TRACE_EXTENSION_URI);
+}
+
+/**
+ * Extract a plain-text status hint from an A2A task status message.
+ * Returns `undefined` when there is nothing useful to surface.
+ */
+function extractStatusMessage(statusMsg: unknown): string | undefined {
+  if (!statusMsg || typeof statusMsg !== 'object') return undefined;
+  const parts = (statusMsg as Record<string, unknown>)['parts'];
+  if (!Array.isArray(parts)) return undefined;
+  const texts: string[] = [];
+  for (const p of parts) {
+    if (p && typeof p === 'object' && (p as Record<string, unknown>)['kind'] === 'text') {
+      const t = (p as Record<string, unknown>)['text'];
+      if (typeof t === 'string' && t.trim()) texts.push(t.trim());
+    }
+  }
+  return texts.length > 0 ? texts.join(' ') : undefined;
+}
+
+/**
+ * Build a `final` dispatch response from a completed A2A task, applying
+ * trace-artifact filtering and the history-fallback heuristic.
+ * Shared by `dispatch()` and `getTask()`.
+ */
+function buildCompletedResponse(
+  result: { id: string; artifacts?: unknown[]; [k: string]: unknown },
+  correlationId: string,
+): A2ADispatchResponse {
+  const allArtifacts: unknown[] = result.artifacts ?? [];
+
+  const traceArtifacts = allArtifacts.filter(isTraceArtifact);
+  const answerArtifacts = allArtifacts.filter((a) => !isTraceArtifact(a));
+
+  if (traceArtifacts.length > 0) {
+    log.debug({
+      correlationId,
+      traceCount: traceArtifacts.length,
+      traceNames: traceArtifacts.map((a) => (a as Record<string, unknown>)['name']),
+    }, '[dispatcher] sideband trace artifacts suppressed (not forwarded to MCP caller)');
+  }
+
+  let finalArtifacts = answerArtifacts;
+  if (finalArtifacts.length === 0) {
+    const history: unknown[] = (result as Record<string, unknown>)['history'] as unknown[] ?? [];
+    const lastAgentMsg = [...history].reverse().find(
+      (m) => (m as Record<string, unknown>)['role'] === 'agent',
+    );
+    if (lastAgentMsg) {
+      log.debug({ correlationId }, '[dispatcher] no answer artifacts — using last history message as answer');
+      finalArtifacts = [lastAgentMsg];
+    }
+  }
+
+  log.debug({ correlationId, answerArtifactCount: finalArtifacts.length }, '[dispatcher] forwarding answer artifacts to MCP caller');
+
+  return {
+    kind: 'final',
+    a2aTaskId: result.id,
+    artifacts: finalArtifacts.map((a) => ({
+      type: 'application/json',
+      data: a,
+    })),
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Client cache
@@ -56,17 +136,22 @@ export class DefaultA2ADispatcher implements A2ADispatcher {
     auth?: AgentAuthProvider;
     correlationId: string;
     fallback?: boolean;
+    contextId?: string;
+    a2aTaskId?: string;
   }): Promise<A2ADispatchResponse> {
     const client = await this.getClient(params.agentUrl, params.auth);
 
     const messageId = randomUUID();
-    // Fallback skill: send a plain-text part with the free-form message.
+    // Fallback skill / text-only skill: send a plain-text part.
+    // Use the `message` field if present; otherwise JSON-serialize all args.
     // Normal skill: send a data part carrying skillId + args.
     const parts = params.fallback
       ? [
           {
             kind: 'text' as const,
-            text: String(params.args['message'] ?? ''),
+            text: typeof params.args['message'] === 'string'
+              ? params.args['message']
+              : JSON.stringify(params.args),
           },
         ]
       : [
@@ -75,17 +160,30 @@ export class DefaultA2ADispatcher implements A2ADispatcher {
             data: { skillId: params.skillId, args: params.args },
           },
         ];
+
+    log.debug({
+      correlationId: params.correlationId,
+      agentUrl: params.agentUrl,
+      skillId: params.skillId,
+      partKind: parts[0].kind,
+      partPayload: parts[0].kind === 'text'
+        ? (parts[0] as { text: string }).text.slice(0, 200)
+        : JSON.stringify((parts[0] as { data: unknown }).data).slice(0, 200),
+    }, '[dispatcher] sending a2a message');
     const response = await client.sendMessage({
       message: {
         kind: 'message',
         messageId,
         role: 'user',
         parts,
+        ...(params.contextId ? { contextId: params.contextId } : {}),
+        ...(params.a2aTaskId ? { taskId: params.a2aTaskId } : {}),
       },
     });
 
     // SendMessageResponse is either { result: Message | Task } or { error: JSONRPCError }
     if ('error' in response && response.error) {
+      log.warn({ correlationId: params.correlationId, error: response.error }, '[dispatcher] a2a error response');
       return {
         kind: 'error',
         code: String(response.error.code),
@@ -96,21 +194,25 @@ export class DefaultA2ADispatcher implements A2ADispatcher {
       return { kind: 'error', code: 'A2A_EMPTY_RESPONSE', message: 'empty response' };
     }
     const result = response.result;
+    log.debug({ correlationId: params.correlationId, resultKind: result.kind, taskState: (result as { status?: { state?: string } }).status?.state }, '[dispatcher] a2a result received');
 
     // Task handle: kind === 'task' with status.state in {'running','submitted',...}
     if (result.kind === 'task') {
       const state = result.status?.state;
       if (state === 'completed') {
-        return {
-          kind: 'final',
-          a2aTaskId: result.id,
-          artifacts: (result.artifacts ?? []).map((a) => ({
-            type: 'application/json',
-            data: a,
-          })),
-        };
+        return buildCompletedResponse(
+          result as unknown as { id: string; artifacts?: unknown[] },
+          params.correlationId,
+        );
       }
-      return { kind: 'task-handle', a2aTaskId: result.id };
+      const statusMessage = extractStatusMessage(result.status?.message);
+      log.debug({
+        correlationId: params.correlationId,
+        a2aTaskId: result.id,
+        state,
+        statusMessage,
+      }, '[dispatcher] task still in-flight — returning handle');
+      return { kind: 'task-handle', a2aTaskId: result.id, statusMessage };
     }
 
     // Message: immediate reply treated as a fast-path final artifact.
@@ -127,6 +229,79 @@ export class DefaultA2ADispatcher implements A2ADispatcher {
     }
 
     return { kind: 'error', code: 'A2A_UNKNOWN_RESULT', message: 'unknown result kind' };
+  }
+
+  // -------------------------------------------------------------------------
+  // Task re-query (tasks/get)
+  // -------------------------------------------------------------------------
+
+  async getTask(params: {
+    agentUrl: string;
+    a2aTaskId: string;
+    auth?: AgentAuthProvider;
+    correlationId: string;
+  }): Promise<A2ADispatchResponse> {
+    const client = await this.getClient(params.agentUrl, params.auth);
+
+    log.debug({
+      correlationId: params.correlationId,
+      agentUrl: params.agentUrl,
+      a2aTaskId: params.a2aTaskId,
+    }, '[dispatcher] re-querying task via tasks/get');
+
+    let task: unknown;
+    try {
+      task = await client.getTask({ id: params.a2aTaskId });
+    } catch (err) {
+      log.warn({ correlationId: params.correlationId, error: err }, '[dispatcher] tasks/get failed');
+      return {
+        kind: 'error',
+        code: 'A2A_GET_TASK_FAILED',
+        message: err instanceof Error ? err.message : String(err),
+      };
+    }
+
+    if (!task || typeof task !== 'object') {
+      return { kind: 'error', code: 'A2A_EMPTY_RESPONSE', message: 'empty tasks/get response' };
+    }
+
+    const t = task as Record<string, unknown>;
+    const status = t['status'] as { state?: string; message?: unknown } | undefined;
+    const state = status?.state;
+
+    log.debug({
+      correlationId: params.correlationId,
+      a2aTaskId: params.a2aTaskId,
+      state,
+    }, '[dispatcher] tasks/get result');
+
+    if (state === 'completed') {
+      return buildCompletedResponse(
+        task as { id: string; artifacts?: unknown[] },
+        params.correlationId,
+      );
+    }
+
+    if (state === 'failed' || state === 'rejected') {
+      const statusMessage = extractStatusMessage(status?.message);
+      return {
+        kind: 'error',
+        code: state === 'failed' ? 'A2A_TASK_FAILED' : 'A2A_TASK_REJECTED',
+        message: statusMessage ?? `Task ${state}`,
+      };
+    }
+
+    if (state === 'canceled') {
+      return {
+        kind: 'error',
+        code: 'A2A_TASK_CANCELLED',
+        message: 'Task was cancelled by the agent',
+      };
+    }
+
+    // Still in-flight (submitted, working, input-required, auth-required, …)
+    const statusMessage = extractStatusMessage(status?.message);
+    return { kind: 'task-handle', a2aTaskId: params.a2aTaskId, statusMessage };
   }
 
   private async getClient(

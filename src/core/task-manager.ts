@@ -95,7 +95,12 @@ export class TaskManager {
     this.genId = options.uuid ?? (() => randomUUID());
   }
 
-  createTask(a2aTaskId: string, agentUrl: string, skillId: string): BridgeTask {
+  createTask(
+    a2aTaskId: string,
+    agentUrl: string,
+    skillId: string,
+    contextId?: string,
+  ): BridgeTask {
     const now = this.clock.now();
     const task: BridgeTask = {
       taskId: this.genId(),
@@ -105,6 +110,7 @@ export class TaskManager {
       state: 'running',
       createdAt: now,
       updatedAt: now,
+      ...(contextId ? { contextId } : {}),
     };
     this.store.put(task);
     return task;
@@ -112,6 +118,19 @@ export class TaskManager {
 
   getTask(taskId: string): BridgeTask | undefined {
     return this.store.get(taskId);
+  }
+
+  /** Update the status message on a running task without changing state. */
+  updateStatusMessage(taskId: string, statusMessage: string): BridgeTask | undefined {
+    const task = this.store.get(taskId);
+    if (!task || task.state !== 'running') return undefined;
+    const updated: BridgeTask = {
+      ...task,
+      statusMessage,
+      updatedAt: this.clock.now(),
+    };
+    this.store.update(updated);
+    return updated;
   }
 
   /**
@@ -183,5 +202,23 @@ export class TaskManager {
 
   listTasks(): BridgeTask[] {
     return this.store.list();
+  }
+
+  /** Find any running task that belongs to the given context (session). */
+  findRunningByContext(contextId: string): BridgeTask | undefined {
+    return this.store.list().find(
+      (t) => t.contextId === contextId && t.state === 'running',
+    );
+  }
+
+  /**
+   * Find the most recently updated task in the given context.
+   * Used to resolve the previous A2A taskId for conversation continuity.
+   */
+  findLatestByContext(contextId: string): BridgeTask | undefined {
+    return this.store
+      .list()
+      .filter((t) => t.contextId === contextId)
+      .sort((a, b) => b.updatedAt - a.updatedAt)[0];
   }
 }

@@ -49,6 +49,7 @@ export interface CanonicalResult {
   status: 'success' | 'error';
   taskId?: string; // present only on long-path
   taskState?: TaskState; // present only on long-path
+  sessionId?: string; // stable context ID across multi-turn interactions
   artifacts: Artifact[];
   metadata: ResultMetadata;
 }
@@ -101,6 +102,8 @@ export interface BridgeTask {
   state: TaskState;
   createdAt: number; // epoch ms
   updatedAt: number; // epoch ms
+  contextId?: string; // Session context — groups related tasks
+  statusMessage?: string; // Latest agent status update (e.g. "Analyzing data…")
   result?: CanonicalResult;
   error?: CanonicalError;
 }
@@ -144,6 +147,8 @@ export interface InvocationContext {
   correlationId: string;
   responseMode: ResponseMode;
   syncBudgetMs: number;
+  /** Caller-supplied session ID for multi-turn conversation continuity. */
+  sessionId?: string;
 }
 
 /** Context passed to ResponseProjector for result shaping. */
@@ -197,6 +202,9 @@ export interface BridgeError {
     fields?: FieldError[];
     agentUrl?: string;
     taskId?: string;
+    sessionId?: string;
+    runningTaskId?: string;
+    elapsedSec?: number;
   };
 }
 
