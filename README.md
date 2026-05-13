@@ -31,9 +31,8 @@ That's it. No schemas to hand-map, no wrappers to write, no protocol translation
 |---|---|
 | **One tool per skill, not per agent** | Each A2A skill becomes its own MCP tool — `research-agent__search`, `research-agent__summarize`. LLMs pick the right one like any other typed function; no fuzzy "agent-of-many-things" wrapper. |
 | **Token-optimized responses** | The default `artifact` mode strips the A2A envelope and emits only the content — native MCP blocks for text, image, audio, and file. Every token saved is a token the LLM spends on reasoning. |
-| **Sync-fast, async-safe** | Replies within the configured sync budget (default 30s) come back inline; anything slower returns a `taskId` and three built-in polling tools — `task_status`, `task_result`, `task_cancel`. No streaming wiring, no hanging calls. |
+| **Sync-fast, async-safe** | Replies within the configured sync budget (default 30 s, tunable via `--sync-budget-ms`) come back inline; anything slower returns a `taskId` and three built-in polling tools — `task_status`, `task_result`, `task_cancel` — that actively re-query the agent before responding. No streaming wiring, no hanging calls. |
 | **Dynamic, not declarative** | Skills added, renamed, or re-typed on the A2A side are picked up on the next refresh. No PR to this project, no hand-written adapter. |
-| **Correctness is measured** | Design document defines 17 correctness properties, each verified by ≥ 100 `fast-check` iterations. CI gates on ≥ 85% statement and ≥ 80% branch coverage. |
 | **Deterministic by design** | Same agent card in → same MCP tools out. Tool names are pure functions of `(agentId, skillId)`, so client tool-caches stay valid across restarts and deployments. |
 | **Pluggable where it matters** | Response projector, tool-naming strategy, storage backends, and auth providers are all swappable interfaces with sensible defaults. |
 | **SDK-first** | Built on the official `@modelcontextprotocol/sdk` and `@a2a-js/sdk` — no hand-rolled JSON-RPC framing. Upstream protocol improvements land here automatically. |
@@ -43,6 +42,7 @@ That's it. No schemas to hand-map, no wrappers to write, no protocol translation
 ## What you get out of the box
 
 - **Two transports**, same engine: stdio for local MCP clients, Streamable HTTP for networked deployments.
+- **Session continuity** — pass a `sessionId` across calls to maintain multi-turn conversations with agents. The bridge handles A2A context/task threading automatically.
 - **Four response modes** — `artifact` (default, multimodal), `structured` (full canonical + metadata), `compact` (≤ 280-char summary), `raw` (byte-equivalent A2A payload). Switch per-deployment. Side-by-side JSON examples in the [operator guide](docs/operator-guide.md#response-modes).
 - **Structured JSON logs** (pino) with automatic correlation IDs tying every log line, every telemetry event, and every OpenTelemetry span to a single tool invocation.
 - **OpenTelemetry**, optional: `setOtelTracer(tracer)` and you get spans around every invocation and agent resolution. Zero runtime cost when unused.
@@ -112,6 +112,93 @@ await bridge.stop();
 
 ---
 
+## Using with MCP clients
+
+### VS Code (GitHub Copilot / Kiro)
+
+Add the bridge to your workspace MCP config at `.vscode/mcp.json` (or `.kiro/settings/mcp.json` for Kiro):
+
+```json
+{
+  "mcpServers": {
+    "research-agent": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "a2a-mcp-skillmap",
+        "--a2a-url",
+        "https://research-agent.example.com"
+      ]
+    }
+  }
+}
+```
+
+For multiple agents or auth, point to a config file instead:
+
+```json
+{
+  "mcpServers": {
+    "my-agents": {
+      "command": "npx",
+      "args": ["-y", "a2a-mcp-skillmap", "--config", "./bridge.json"]
+    }
+  }
+}
+```
+
+Restart the MCP server from the command palette and the agent's skills appear as tools in your chat.
+
+### Claude Desktop
+
+Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS, `%APPDATA%\Claude\claude_desktop_config.json` on Windows):
+
+```json
+{
+  "mcpServers": {
+    "research-agent": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "a2a-mcp-skillmap",
+        "--a2a-url",
+        "https://research-agent.example.com"
+      ]
+    }
+  }
+}
+```
+
+Restart Claude Desktop. The agent's skills will appear as available tools in your conversation.
+
+### Cursor
+
+Add to your Cursor MCP config at `.cursor/mcp.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "research-agent": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "a2a-mcp-skillmap",
+        "--a2a-url",
+        "https://research-agent.example.com"
+      ]
+    }
+  }
+}
+```
+
+### Tips
+
+- Use `--sync-budget-ms 10000` for interactive use (faster task-handle responses).
+- Set `--log-level warn` in MCP client configs to keep stderr quiet.
+- For agents requiring auth, use a config file — don't put tokens in args where they may appear in process listings.
+
+---
+
 ## How it works
 
 ```
@@ -131,15 +218,49 @@ All external data — agent cards, skill schemas, MCP tool calls — is validate
 
 ---
 
+## Session continuity (multi-turn conversations)
+
+Every tool response includes a `sessionId`. Pass it back on the next call to maintain conversation context with the same agent — the bridge maps it to the A2A `contextId` and `taskId` so the remote agent sees a continuous thread.
+
+```jsonc
+// First call — no sessionId
+{ "message": "What's the weather in Berlin?" }
+
+// Response includes sessionId
+{ "sessionId": "a1b2c3...", "artifacts": [...] }
+
+// Follow-up — pass sessionId back
+{ "message": "And tomorrow?", "sessionId": "a1b2c3..." }
+```
+
+If a previous task on the same session is still running, the bridge rejects the new call with a `SESSION_TASK_RUNNING` error and tells the LLM to wait or cancel first — preventing race conditions on the agent side.
+
+---
+
+## Sync budget
+
+The sync budget controls how long the bridge waits for an A2A agent to respond before switching to async task polling. Default: 30 000 ms. Set to `0` to wait indefinitely.
+
+```bash
+# Wait up to 10 seconds, then return a task handle
+npx a2a-mcp-skillmap --a2a-url https://agent.example.com --sync-budget-ms 10000
+```
+
+When the budget expires:
+1. The bridge immediately returns a `taskId` to the MCP client.
+2. The A2A dispatch continues in the background.
+3. The LLM can poll via `task_result` or `task_status` — both actively re-query the remote agent and wait briefly before responding, so the LLM doesn't hammer the tool in a tight loop.
+
+---
+
 ## Documentation
 
 - **[Examples](examples/)** — every supported way to start the bridge (CLI, env, config file, programmatic, embedded in MCP clients), with copy-pasteable snippets.
 - **[API reference](docs/api-reference.md)** — every exported symbol, its parameters, return types, and error conditions.
 - **[CLI reference](docs/cli-reference.md)** — every flag, env var, config key, and exit code.
-- **[Operator guide](docs/operator-guide.md)** — transport selection, authentication, response modes, observability, reference performance.
+- **[Operator guide](docs/operator-guide.md)** — transport selection, authentication, response modes, session continuity, sync budget, observability, reference performance.
 - **[Contributor guide](docs/contributor-guide.md)** — dev setup, commit conventions, review process, release process.
 - **[Security](docs/security.md)** — threat model, secret handling, vulnerability reporting.
-- **[ADRs](docs/adr/)** — architectural decision records.
 - **[Traceability matrix](docs/traceability-matrix.md)** — every requirement mapped to design, code, and tests.
 
 ---

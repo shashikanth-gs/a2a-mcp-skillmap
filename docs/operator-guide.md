@@ -227,6 +227,41 @@ telemetry.subscribe((event) => {
 
 Agent card resolution retries with exponential backoff (`retry.maxAttempts` × `retry.initialDelayMs × 2^(n-1)` plus ±10% jitter). Failures after the retry budget terminate startup with a non-zero exit — if one agent of many fails, the rest continue; if zero agents resolve, the bridge exits.
 
+## Session continuity
+
+The bridge supports multi-turn conversations with A2A agents via a `sessionId` parameter that is automatically added to every generated tool's input schema.
+
+**How it works:**
+
+1. On the first call, omit `sessionId`. The bridge generates one and returns it in the response.
+2. On follow-up calls, pass the `sessionId` from the previous response. The bridge maps it to the A2A `contextId` and forwards the previous `taskId` so the remote agent sees a continuous conversation thread.
+3. If a task is still running on the same session, the bridge rejects the new call with `SESSION_TASK_RUNNING` and tells the caller to wait or cancel first.
+
+The `sessionId` is a bridge-level concept — it's stripped from the args before dispatch and never forwarded as agent input. Agents see the standard A2A `contextId` / `taskId` fields.
+
+## Sync budget & task polling
+
+The sync budget (`--sync-budget-ms`, default 30 000 ms) controls how long the bridge waits for an A2A agent to respond before switching to async mode.
+
+**Behavior when the budget expires:**
+
+1. The bridge returns a `taskId` immediately with a `text/plain` artifact explaining the task is in flight.
+2. The original A2A dispatch continues in the background. When it settles, the bridge updates the task store.
+3. `task_status` and `task_result` actively re-query the remote agent (via `tasks/get`) and wait up to the sync budget before responding — this prevents the LLM from polling in a tight loop and gives the agent time to finish.
+
+**Choosing a budget:**
+
+- **Short budget (5–10 s):** Best for interactive UIs where perceived latency matters. The LLM gets a task handle quickly and can inform the user that work is in progress.
+- **Long budget (30–60 s):** Best for batch/autonomous workflows where you'd rather get the answer inline than manage polling.
+- **Zero (disabled):** The bridge waits indefinitely for the agent. Use only when you trust the agent to respond in bounded time.
+
+## Status forwarding
+
+When an A2A agent reports intermediate status updates (e.g. "Analyzing data…", "Querying database…"), the bridge captures and surfaces them:
+
+- In `task_status` responses: the latest agent status message is included in the artifact text.
+- In `task_result` responses for still-running tasks: elapsed time and agent status are reported so the LLM can relay progress to the user.
+
 ## Graceful shutdown
 
 The CLI handle returned by `runCli` exposes `stop()`. When running as a process:

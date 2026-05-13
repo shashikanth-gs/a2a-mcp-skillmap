@@ -11,6 +11,7 @@ All flags can also be supplied via environment variables or a JSON configuration
 | `--port <n>` | `A2A_MCP_PORT` | `http.port` | `3000` | HTTP port (1–65535). |
 | `--response-mode <mode>` | `A2A_MCP_RESPONSE_MODE` | `responseMode` | `artifact` | `artifact` \| `structured` \| `compact` \| `raw`. See [operator guide](operator-guide.md#response-modes) for examples. |
 | `--fallback-tool <mode>` | `A2A_MCP_FALLBACK_TOOL` | `fallbackTool` | `message` | `none` \| `message`. Controls what happens when an agent card advertises zero skills. |
+| `--sync-budget-ms <ms>` | `A2A_MCP_SYNC_BUDGET_MS` | `syncBudgetMs` | `30000` | Max milliseconds to wait for an A2A response before switching to async task polling. `0` = wait indefinitely. |
 | `--config <path>` | — | — | — | Path to a JSON config file. |
 | `--log-level <level>` | `A2A_MCP_LOG_LEVEL` | `logging.level` | `info` | `trace` \| `debug` \| `info` \| `warn` \| `error` \| `fatal` |
 
@@ -20,7 +21,6 @@ These have no direct CLI flag; set via env or config.
 
 | Env var | Config key | Default |
 |---|---|---|
-| `A2A_MCP_SYNC_BUDGET_MS` | `syncBudgetMs` | `30000` |
 | `A2A_MCP_TASK_RETENTION_MS` | `taskRetentionMs` | `3600000` |
 | `A2A_MCP_RETRY_MAX_ATTEMPTS` | `retry.maxAttempts` | `3` |
 | `A2A_MCP_RETRY_INITIAL_DELAY_MS` | `retry.initialDelayMs` | `500` |
