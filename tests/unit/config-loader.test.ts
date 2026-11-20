@@ -126,6 +126,25 @@ describe('loadConfig — environment variables', () => {
     expect(config.retry.initialDelayMs).toBe(1000);
   });
 
+  it('maps trace-forwarding env vars', () => {
+    const config = loadConfig({
+      env: {
+        A2A_MCP_AGENTS: 'https://a.example',
+        A2A_MCP_PARENT_AGENT_ID: 'orchestrator',
+        A2A_MCP_TRACE_FORWARDING: 'off',
+      },
+    });
+    expect(config.propagation).toEqual({ forwardTraceContext: false, parentAgentId: 'orchestrator' });
+  });
+
+  it('forwards trace context by default and ignores an unrecognised A2A_MCP_TRACE_FORWARDING', () => {
+    expect(loadConfig({ env: { A2A_MCP_AGENTS: 'https://a.example' } }).propagation.forwardTraceContext).toBe(true);
+    expect(
+      loadConfig({ env: { A2A_MCP_AGENTS: 'https://a.example', A2A_MCP_TRACE_FORWARDING: 'maybe' } }).propagation
+        .forwardTraceContext,
+    ).toBe(true);
+  });
+
   it('maps inbound auth env vars', () => {
     const config = loadConfig({
       env: {
@@ -338,5 +357,31 @@ describe('redactConfig', () => {
 
     expect(auth['mode']).toBe('none');
     expect(auth['token']).toBeUndefined();
+  });
+});
+
+describe('propagation from a config file', () => {
+  it('is read from the file and overridden per key by env', () => {
+    const filePath = join(tmpdir(), `config-loader-prop-${Date.now()}.json`);
+    writeFileSync(
+      filePath,
+      JSON.stringify({
+        agents: [{ url: 'https://a.example' }],
+        propagation: { parentAgentId: 'from-file', propagatedMetadata: { tenant: 'acme' } },
+      }),
+    );
+    try {
+      const fromFile = loadConfig({ filePath, env: {} });
+      expect(fromFile.propagation).toEqual({
+        forwardTraceContext: true,
+        parentAgentId: 'from-file',
+        propagatedMetadata: { tenant: 'acme' },
+      });
+      const merged = loadConfig({ filePath, env: { A2A_MCP_PARENT_AGENT_ID: 'from-env' } });
+      expect(merged.propagation.parentAgentId).toBe('from-env');
+      expect(merged.propagation.propagatedMetadata).toEqual({ tenant: 'acme' });
+    } finally {
+      rmSync(filePath, { force: true });
+    }
   });
 });

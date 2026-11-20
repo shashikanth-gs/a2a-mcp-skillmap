@@ -31,6 +31,11 @@ const FULL_INPUT: BridgeConfig = {
   taskRetentionMs: 7200000,
   retry: { maxAttempts: 5, initialDelayMs: 1000 },
   logging: { level: 'debug' },
+  propagation: {
+    forwardTraceContext: false,
+    parentAgentId: 'orchestrator',
+    propagatedMetadata: { tenant: 'acme' },
+  },
 };
 
 describe('BridgeConfigSchema', () => {
@@ -43,6 +48,7 @@ describe('BridgeConfigSchema', () => {
     expect(result.taskRetentionMs).toBe(3_600_000);
     expect(result.retry).toEqual({ maxAttempts: 3, initialDelayMs: 500 });
     expect(result.logging).toEqual({ level: 'info' });
+    expect(result.propagation).toEqual({ forwardTraceContext: true });
     expect(result.agents[0].auth).toEqual({ mode: 'none' });
     expect(result.http).toBeUndefined();
   });

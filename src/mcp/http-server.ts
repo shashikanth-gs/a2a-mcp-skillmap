@@ -80,13 +80,35 @@ export function createHttpAdapter(
     });
   }
 
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: undefined, // stateless
-  });
-
-  // Route all requests through the MCP transport.
+  // Stateless mode: the SDK refuses to reuse a transport across requests
+  // ("Create a new transport per request"), so each request gets its own
+  // transport and MCP server. Tool callbacks read the caller's `traceparent`
+  // from this request's headers (see register-tools).
   app.all('/mcp', async (req, res) => {
-    await transport.handleRequest(req, res, req.body as unknown);
+    const perRequest = new McpServer(
+      options.info ?? { name: 'a2a-mcp-skillmap', version: '0.1.0' },
+    );
+    registerBridgeTools(perRequest, engine);
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: undefined, // stateless
+    });
+    res.on('close', () => {
+      void transport.close();
+      void perRequest.close();
+    });
+    try {
+      await perRequest.connect(transport);
+      await transport.handleRequest(req, res, req.body as unknown);
+    } catch (err) {
+      if (!res.headersSent) {
+        res.status(500).json({
+          jsonrpc: '2.0',
+          error: { code: -32603, message: 'Internal server error' },
+          id: null,
+        });
+      }
+      void err;
+    }
   });
 
   let listener: import('node:http').Server | undefined;
@@ -98,7 +120,6 @@ export function createHttpAdapter(
       return actualPort;
     },
     async start() {
-      await server.connect(transport);
       await new Promise<void>((resolve, reject) => {
         listener = app.listen(options.port);
         listener.once('listening', () => {
@@ -116,7 +137,6 @@ export function createHttpAdapter(
       });
     },
     async stop() {
-      await server.close();
       if (listener) {
         await new Promise<void>((resolve) => listener!.close(() => resolve()));
       }

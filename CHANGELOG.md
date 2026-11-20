@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Trace-context forwarding to sub-agents.** The caller's W3C trace context is read from each tool call, from `params._meta.traceparent` (Copilot, stdio and HTTP) or an HTTP `traceparent` header (Claude Code, HTTP), validated strictly, and forwarded to the sub-agent as an HTTP `traceparent`/`tracestate` header and in `message.metadata`. Calls with no context behave exactly as before.
+- **CLIENT span per delegated call** when a tracer is registered (`setOtelTracer`); its context is the one forwarded. New `setOtelApi()` for environments where the optional `@opentelemetry/api` peer cannot be dynamically imported.
+- **Caller attribution.** New `propagation` config (`forwardTraceContext`, `parentAgentId`, `propagatedMetadata`; env `A2A_MCP_TRACE_FORWARDING`, `A2A_MCP_PARENT_AGENT_ID`). `parentAgentId` and a bounded, redacted `propagatedMetadata` are sent as `metadata.parent_agent_id` / `metadata.propagated_metadata`.
+
+### Fixed
+- **HTTP transport served only one request.** The adapter reused a single stateless MCP transport, which the SDK rejects after the first request (HTTP 500 on every later request, including `tools/call` after `initialize`). Each request now gets its own transport and server.
+
 ## [0.2.1] — 2026-05-13
 
 ### Added

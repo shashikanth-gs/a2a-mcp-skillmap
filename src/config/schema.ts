@@ -75,6 +75,20 @@ export const BridgeConfigSchema = z.object({
         .default('info'),
     })
     .default({}),
+
+  /**
+   * Trace-context forwarding and caller attribution for delegated A2A calls.
+   * The caller's `traceparent` (MCP `_meta` or HTTP header) is forwarded so the
+   * sub-agent's trace joins the caller's; `parentAgentId` and
+   * `propagatedMetadata` let the sub-agent attribute its events to the caller.
+   */
+  propagation: z
+    .object({
+      forwardTraceContext: z.boolean().default(true),
+      parentAgentId: z.string().min(1).max(256).optional(),
+      propagatedMetadata: z.record(z.unknown()).optional(),
+    })
+    .default({}),
 });
 
 // ---------------------------------------------------------------------------

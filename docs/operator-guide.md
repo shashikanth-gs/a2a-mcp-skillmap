@@ -210,6 +210,41 @@ setOtelTracer(trace.getTracer('a2a-mcp-skillmap'));
 
 When no tracer is registered, `withSpan` calls are no-ops and OTel is never imported.
 
+### Trace-context forwarding
+
+When the bridge is the tool server of an agent (for example an `a2a-wrapper` agent delegating to sub-agents), it forwards the **caller's trace** to the sub-agent so the delegated work shows up in the same trace.
+
+The context is read from the tool call, from either carrier (backends differ):
+
+| Carrier | Sent by | Transport |
+|---|---|---|
+| `params._meta.traceparent` (+ `tracestate`) | GitHub Copilot CLI (telemetry on) | stdio and HTTP |
+| HTTP `traceparent` header | Claude Code (tracing on) | HTTP only |
+
+`_meta` wins when both are present; a value that is not a valid W3C `traceparent` is ignored. Backends that send neither (OpenCode, Claude Code over stdio) get the previous behaviour: nothing is forwarded.
+
+On the outgoing A2A request the bridge sets the HTTP `traceparent` (and `tracestate`) header and the same values in `message.metadata`, which an `a2a-wrapper` agent reads. If you register a tracer (see [OpenTelemetry](#opentelemetry)) the bridge also creates a CLIENT span per delegated call (parented on the caller's context) and forwards **that** span's context, so the sub-agent becomes a child of the delegation hop. Without a tracer the caller's context is passed through unchanged. The optional `@opentelemetry/api` peer is only loaded when a tracer is registered; use `setOtelApi()` if it cannot be resolved by dynamic import (for example in a bundle).
+
+Caller attribution is configured, not inferred:
+
+```json
+{
+  "propagation": {
+    "forwardTraceContext": true,
+    "parentAgentId": "orchestrator",
+    "propagatedMetadata": { "tenant": "acme" }
+  }
+}
+```
+
+| Setting | Env | Meaning |
+|---|---|---|
+| `propagation.forwardTraceContext` | `A2A_MCP_TRACE_FORWARDING` | Forward the caller's trace (default `true`). `false` keeps attribution but sends no trace. |
+| `propagation.parentAgentId` | `A2A_MCP_PARENT_AGENT_ID` | Sent as `metadata.parent_agent_id` so the sub-agent can attribute its events to the caller. |
+| `propagation.propagatedMetadata` | — | Sent as `metadata.propagated_metadata`. Bounded (64 keys, 8 KB, key charset `[A-Za-z0-9_.-]`); values of secret-looking keys (`token`, `password`, `authorization`, ...) are replaced by `[redacted]`. |
+
+Security: the context comes from whoever can call the bridge. With HTTP transport use inbound auth; the receiving agent decides how far to trust a forwarded trace (`a2a-wrapper` offers `otel.propagation.trustedPeers`).
+
 ### Telemetry hooks
 
 For structured in-process consumption without parsing logs:
