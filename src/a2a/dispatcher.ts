@@ -26,6 +26,13 @@ import type {
 import type { AgentAuthProvider } from '../types/index.js';
 import { resolveCardUrl } from './card-url.js';
 import { createLogger } from '../core/logger.js';
+import {
+  currentInboundTrace,
+  currentOutboundTrace,
+  runWithOutboundTrace,
+  sanitizePropagatedMetadata,
+} from '../core/trace-context.js';
+import { startClientSpan } from '../core/telemetry.js';
 
 const log = createLogger({ level: 'debug' });
 
@@ -110,7 +117,23 @@ function buildCompletedResponse(
 // Client cache
 // ---------------------------------------------------------------------------
 
+/** What the bridge tells a sub-agent about the call it is serving. */
+export interface DispatcherPropagation {
+  /**
+   * Forward the caller's trace context (from MCP `_meta.traceparent` or the HTTP
+   * `traceparent` header) to the sub-agent as an HTTP `traceparent` header and
+   * message metadata. Default: true.
+   */
+  forwardTraceContext?: boolean;
+  /** Id of the calling agent, sent as `metadata.parent_agent_id`. */
+  parentAgentId?: string;
+  /** Static caller metadata, sent as `metadata.propagated_metadata` (bounded and redacted). */
+  propagatedMetadata?: Record<string, unknown>;
+}
+
 interface DispatcherOptions {
+  /** Trace-context forwarding and caller attribution. */
+  propagation?: DispatcherPropagation;
   /** Optional cache of pre-built A2AClient instances keyed by agent URL. */
   clientFactory?: (
     agentUrl: string,
@@ -125,8 +148,11 @@ export class DefaultA2ADispatcher implements A2ADispatcher {
     auth?: AgentAuthProvider,
   ) => Promise<A2AClient> | A2AClient;
 
+  private readonly propagation: DispatcherPropagation;
+
   constructor(options: DispatcherOptions = {}) {
     this.clientFactory = options.clientFactory ?? defaultClientFactory;
+    this.propagation = options.propagation ?? {};
   }
 
   async dispatch(params: {
@@ -170,16 +196,45 @@ export class DefaultA2ADispatcher implements A2ADispatcher {
         ? (parts[0] as { text: string }).text.slice(0, 200)
         : JSON.stringify((parts[0] as { data: unknown }).data).slice(0, 200),
     }, '[dispatcher] sending a2a message');
-    const response = await client.sendMessage({
-      message: {
-        kind: 'message',
-        messageId,
-        role: 'user',
-        parts,
-        ...(params.contextId ? { contextId: params.contextId } : {}),
-        ...(params.a2aTaskId ? { taskId: params.a2aTaskId } : {}),
-      },
+    // Trace context: join the caller's trace (or the bridge's own client span).
+    const forward = this.propagation.forwardTraceContext !== false;
+    const clientSpan = await startClientSpan(forward ? currentInboundTrace() : undefined, {
+      'a2a.method.name': 'message/send',
+      'a2a.agent.url': params.agentUrl,
+      'a2a.skill.id': params.skillId,
+      'a2a.bridge.correlation_id': params.correlationId,
     });
+    const carrier = forward ? clientSpan.carrier : undefined;
+    const propagated = sanitizePropagatedMetadata(this.propagation.propagatedMetadata);
+    const metadata: Record<string, unknown> = {
+      ...(carrier ? { traceparent: carrier.traceparent } : {}),
+      ...(carrier?.tracestate ? { tracestate: carrier.tracestate } : {}),
+      ...(this.propagation.parentAgentId ? { parent_agent_id: this.propagation.parentAgentId } : {}),
+      ...(propagated ? { propagated_metadata: propagated } : {}),
+    };
+
+    let response: Awaited<ReturnType<A2AClient['sendMessage']>>;
+    try {
+      response = await runWithOutboundTrace(carrier, () =>
+        client.sendMessage({
+          message: {
+            kind: 'message',
+            messageId,
+            role: 'user',
+            parts,
+            ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+            ...(params.contextId ? { contextId: params.contextId } : {}),
+            ...(params.a2aTaskId ? { taskId: params.a2aTaskId } : {}),
+          },
+        }),
+      );
+    } catch (err) {
+      clientSpan.end(err);
+      throw err;
+    }
+    clientSpan.end(
+      'error' in response && response.error ? new Error(response.error.message ?? 'A2A error') : undefined,
+    );
 
     // SendMessageResponse is either { result: Message | Task } or { error: JSONRPCError }
     if ('error' in response && response.error) {
@@ -321,15 +376,22 @@ async function defaultClientFactory(
   agentUrl: string,
   auth?: AgentAuthProvider,
 ): Promise<A2AClient> {
-  const fetchImpl: typeof fetch = auth
-    ? (async (input, init) => {
-        const headers = new Headers(init?.headers ?? {});
-        const bag: Record<string, string> = {};
-        auth.applyAuth(bag);
-        for (const [k, v] of Object.entries(bag)) headers.set(k, v);
-        return fetch(input, { ...init, headers });
-      }) as typeof fetch
-    : fetch;
+  const fetchImpl: typeof fetch = (async (input, init) => {
+    const headers = new Headers(init?.headers ?? {});
+    if (auth) {
+      const bag: Record<string, string> = {};
+      auth.applyAuth(bag);
+      for (const [k, v] of Object.entries(bag)) headers.set(k, v);
+    }
+    // Per-request trace context (set around sendMessage); clients are cached,
+    // so this is read at call time rather than at construction.
+    const trace = currentOutboundTrace();
+    if (trace && !headers.has('traceparent')) {
+      headers.set('traceparent', trace.traceparent);
+      if (trace.tracestate) headers.set('tracestate', trace.tracestate);
+    }
+    return fetch(input, { ...init, headers });
+  }) as typeof fetch;
 
   // Probe well-known paths (or use the explicit URL if the caller supplied one).
   const { cardText } = await resolveCardUrl(agentUrl, fetchImpl);

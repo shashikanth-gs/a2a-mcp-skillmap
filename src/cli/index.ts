@@ -139,7 +139,18 @@ export async function runCli(
   })();
 
   const dispatcher =
-    overrides.bridgeOptions?.dispatcher ?? new DefaultA2ADispatcher();
+    overrides.bridgeOptions?.dispatcher ??
+    new DefaultA2ADispatcher({
+      propagation: {
+        forwardTraceContext: config.propagation.forwardTraceContext,
+        ...(config.propagation.parentAgentId !== undefined
+          ? { parentAgentId: config.propagation.parentAgentId }
+          : {}),
+        ...(config.propagation.propagatedMetadata !== undefined
+          ? { propagatedMetadata: config.propagation.propagatedMetadata }
+          : {}),
+      },
+    });
   const bridge = createBridge(config, {
     ...(overrides.bridgeOptions ?? {}),
     dispatcher,

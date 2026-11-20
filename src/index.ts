@@ -144,6 +144,16 @@ export type { FallbackMode } from './core/fallback-skill.js';
 
 // Default A2A dispatcher
 export { DefaultA2ADispatcher } from './a2a/dispatcher.js';
+export type { DispatcherPropagation } from './a2a/dispatcher.js';
+export {
+  parseTraceparent,
+  sanitizeTracestate,
+  extractTraceContext,
+  sanitizePropagatedMetadata,
+  runWithInboundTrace,
+  currentInboundTrace,
+} from './core/trace-context.js';
+export type { TraceCarrier, ParsedTraceparent } from './core/trace-context.js';
 export { resolveCardUrl, CardUrlResolutionError } from './a2a/card-url.js';
 export type { ResolvedCard } from './a2a/card-url.js';
 
@@ -158,7 +168,10 @@ export {
   setOtelTracer,
   getOtelTracer,
   withSpan,
+  startClientSpan,
+  setOtelApi,
 } from './core/telemetry.js';
+export type { ClientSpan } from './core/telemetry.js';
 export type {
   TelemetryEvent,
   TelemetryListener,

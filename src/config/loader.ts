@@ -33,6 +33,11 @@ export interface RawConfig {
   };
   responseMode?: string;
   fallbackTool?: string;
+  propagation?: {
+    forwardTraceContext?: boolean;
+    parentAgentId?: string;
+    propagatedMetadata?: Record<string, unknown>;
+  };
   syncBudgetMs?: number;
   taskRetentionMs?: number;
   retry?: { maxAttempts?: number; initialDelayMs?: number };
@@ -115,6 +120,19 @@ function configFromEnv(
   if (env['A2A_MCP_TASK_RETENTION_MS']) {
     const n = Number(env['A2A_MCP_TASK_RETENTION_MS']);
     if (!Number.isNaN(n)) raw.taskRetentionMs = n;
+  }
+
+  // Trace-context forwarding and caller attribution
+  if (env['A2A_MCP_TRACE_FORWARDING']) {
+    const v = env['A2A_MCP_TRACE_FORWARDING'].trim().toLowerCase();
+    if (v === 'false' || v === '0' || v === 'off') {
+      raw.propagation = { ...raw.propagation, forwardTraceContext: false };
+    } else if (v === 'true' || v === '1' || v === 'on') {
+      raw.propagation = { ...raw.propagation, forwardTraceContext: true };
+    }
+  }
+  if (env['A2A_MCP_PARENT_AGENT_ID']) {
+    raw.propagation = { ...raw.propagation, parentAgentId: env['A2A_MCP_PARENT_AGENT_ID'] };
   }
 
   if (env['A2A_MCP_LOG_LEVEL']) {
@@ -221,6 +239,11 @@ function mergeRaw(
   // Nested: retry
   if (high.retry !== undefined) {
     result.retry = { ...result.retry, ...high.retry };
+  }
+
+  // Nested: propagation (trace-context forwarding, caller attribution)
+  if (high.propagation !== undefined) {
+    result.propagation = { ...result.propagation, ...high.propagation };
   }
 
   // Nested: logging

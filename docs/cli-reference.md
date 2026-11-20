@@ -27,6 +27,8 @@ These have no direct CLI flag; set via env or config.
 | `A2A_MCP_INBOUND_AUTH_MODE` | `http.inboundAuth.mode` | `none` |
 | `A2A_MCP_INBOUND_AUTH_TOKEN` | `http.inboundAuth.token` | — |
 | `A2A_MCP_INBOUND_AUTH_HEADER` | `http.inboundAuth.headerName` | `X-API-Key` (for `api_key`) |
+| `A2A_MCP_TRACE_FORWARDING` | `propagation.forwardTraceContext` | `true` (`false`/`0`/`off` disables) |
+| `A2A_MCP_PARENT_AGENT_ID` | `propagation.parentAgentId` | — |
 
 ## Per-agent auth (config file only)
 
